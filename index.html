@@ -646,8 +646,9 @@ $("qform").addEventListener("submit", async ev => {
     await duckdbReady;
     status("Frage ab …");
     const t0 = performance.now();
-    // SecID-Layout: eine Datei pro SecID (alle Jahre), nach Datum filtern.
-    const url = dataUrl(`secid/${Number(secid)}.parquet`);
+    // SecID-Layout: eine Datei pro SecID, in Unterordner gesharded (opt/<NN>/,
+    // NN = SecID % 100), da HF max. 10.000 Dateien pro Ordner erlaubt.
+    const url = dataUrl(`opt/${Number(secid) % 100}/${Number(secid)}.parquet`);
     const res = await conn.query(`
       SELECT * FROM read_parquet('${url}')
       WHERE date = ${d}
@@ -1125,7 +1126,7 @@ $("s_load").onclick = async () => {
     const res = await conn.query(`
       SELECT date, best_bid, best_offer, volume, open_interest,
              implied_vol, delta, gamma, vega, theta
-      FROM read_parquet('${dataUrl(`secid/${secid}.parquet`)}')
+      FROM read_parquet('${dataUrl(`opt/${Number(secid) % 100}/${secid}.parquet`)}')
       WHERE option_id = ${opt.option_id} AND date BETWEEN ${von} AND ${bis}
       ORDER BY date`);
     for (const r of res.toArray()) {
@@ -1408,7 +1409,7 @@ async function onRealizedDateChange() {
     await duckdbReady;
     const secid = Number($("secid").value);
     const ids = [...new Set(legs.map(l => l.opt.option_id))];
-    const url = dataUrl(`secid/${secid}.parquet`);
+    const url = dataUrl(`opt/${Number(secid) % 100}/${secid}.parquet`);
     const res = await conn.query(`
       SELECT option_id, best_bid, best_offer FROM read_parquet('${url}')
       WHERE date = ${d} AND option_id IN (${ids.join(",")})
@@ -1490,7 +1491,7 @@ $("r_curve").onclick = async () => {
     // statt in 10-Tage-Batches ueber viele Tagesdateien.
     const res = await conn.query(`
       SELECT date, option_id, best_bid, best_offer
-      FROM read_parquet('${dataUrl(`secid/${secid}.parquet`)}')
+      FROM read_parquet('${dataUrl(`opt/${Number(secid) % 100}/${secid}.parquet`)}')
       WHERE option_id IN (${ids.join(",")}) AND date BETWEEN ${ds[0]} AND ${ds[ds.length - 1]}
       ORDER BY date`);
     const byDate = new Map();
