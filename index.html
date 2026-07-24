@@ -646,10 +646,11 @@ $("qform").addEventListener("submit", async ev => {
     await duckdbReady;
     status("Frage ab …");
     const t0 = performance.now();
-    const url = dataUrl(`${Math.floor(d / 10000)}/${d}.parquet`);
+    // SecID-Layout: eine Datei pro SecID (alle Jahre), nach Datum filtern.
+    const url = dataUrl(`secid/${Number(secid)}.parquet`);
     const res = await conn.query(`
       SELECT * FROM read_parquet('${url}')
-      WHERE security_id = ${Number(secid)}
+      WHERE date = ${d}
       ORDER BY expiration, strike, call_put
     `);
     columns = res.schema.fields.map(f => f.name);
@@ -1074,19 +1075,6 @@ for (const id of ["s_von", "s_bis"]) $(id).onchange = () => {
     $("s_prog").textContent = `${seriesDayCount().toLocaleString("de-DE")} Handelstage im Zeitraum — „Zeitreihe laden“ klicken.`;
 };
 
-// Pool zusätzlicher DuckDB-Verbindungen: Über die Cloud dominiert die Netzwerk-
-// Latenz pro Tagesdatei. Mehrere Verbindungen fragen parallel ab, sodass die
-// Latenzen sich überlappen statt zu summieren.
-let connPool = [];
-async function getConns(k) {
-  await duckdbReady;
-  while (connPool.length < k) {
-    const c = await db.connect();
-    try { await c.query("SET enable_http_metadata_cache=true"); } catch {}
-    connPool.push(c);
-  }
-  return connPool.slice(0, k);
-}
 
 $("s_load").onclick = async () => {
   const opt = seriesSelection();
@@ -1130,46 +1118,22 @@ $("s_load").onclick = async () => {
       } catch { seriesData.underlying = null; }
     }
 
-    // Tages-Dateien in Batches, aber mehrere Batches gleichzeitig: K Verbindungen
-    // ziehen aus einer gemeinsamen Schlange. So laufen bis zu K Abfragen parallel.
-    const B = 8;
-    const batches = [];
-    for (let i = 0; i < dates.length; i += B) batches.push(dates.slice(i, i + B));
-    const K = Math.min(6, batches.length);
-    const pool = await getConns(K);
-    let nextBatch = 0, done = 0, lastDraw = 0;
+    // SecID-Layout: EINE Abfrage auf die SecID-Datei (statt ~125 Tagesdateien
+    // einzeln zu oeffnen). Das Batch-/Verbindungspool-Geruest entfaellt komplett;
+    // die Zeilen kommen bereits nach Datum sortiert zurueck.
     setProg(0);
-
-    const runWorker = async (c) => {
-      while (!seriesAbort) {
-        const bi = nextBatch++;
-        if (bi >= batches.length) break;
-        const batch = batches[bi];
-        const urls = batch
-          .map(d => `'${dataUrl(Math.floor(d / 10000) + "/" + d + ".parquet")}'`).join(",");
-        const res = await c.query(`
-          SELECT date, best_bid, best_offer, volume, open_interest,
-                 implied_vol, delta, gamma, vega, theta
-          FROM read_parquet([${urls}])
-          WHERE security_id = ${secid} AND option_id = ${opt.option_id}`);
-        for (const r of res.toArray()) {
-          const o = r.toJSON();
-          for (const k in o) if (typeof o[k] === "bigint") o[k] = Number(o[k]);
-          points.push(o);
-        }
-        done += batch.length;
-        setProg(done);
-        const now = performance.now();
-        if (now - lastDraw > 400) {   // gedrosselt neu zeichnen (nicht bei jedem Batch)
-          lastDraw = now;
-          points.sort((a, b) => a.date - b.date);
-          await drawSeries();
-        }
-      }
-    };
-    await Promise.all(pool.map(runWorker));
-
-    points.sort((a, b) => a.date - b.date);   // finale Sortierung (Batches kommen unsortiert an)
+    const res = await conn.query(`
+      SELECT date, best_bid, best_offer, volume, open_interest,
+             implied_vol, delta, gamma, vega, theta
+      FROM read_parquet('${dataUrl(`secid/${secid}.parquet`)}')
+      WHERE option_id = ${opt.option_id} AND date BETWEEN ${von} AND ${bis}
+      ORDER BY date`);
+    for (const r of res.toArray()) {
+      const o = r.toJSON();
+      for (const k in o) if (typeof o[k] === "bigint") o[k] = Number(o[k]);
+      points.push(o);
+    }
+    setProg(dates.length);
     await drawSeries();
     const dt = ((performance.now() - t0) / 1000).toFixed(1);
     $("s_prog").textContent = `${points.length.toLocaleString("de-DE")} Punkte geladen (${dt} s)` +
@@ -1444,10 +1408,10 @@ async function onRealizedDateChange() {
     await duckdbReady;
     const secid = Number($("secid").value);
     const ids = [...new Set(legs.map(l => l.opt.option_id))];
-    const url = dataUrl(`${Math.floor(d / 10000)}/${d}.parquet`);
+    const url = dataUrl(`secid/${secid}.parquet`);
     const res = await conn.query(`
       SELECT option_id, best_bid, best_offer FROM read_parquet('${url}')
-      WHERE security_id = ${secid} AND option_id IN (${ids.join(",")})
+      WHERE date = ${d} AND option_id IN (${ids.join(",")})
     `);
     const byId = new Map();
     for (const r of res.toArray()) {
@@ -1522,37 +1486,32 @@ $("r_curve").onclick = async () => {
   const t0 = performance.now();
   try {
     await duckdbReady;
-    const B = 10;
-    for (let i = 0; i < ds.length; i += B) {
-      if (curveAbort) break;
-      const batch = ds.slice(i, i + B);
-      const urls = batch.map(d => `'${dataUrl(Math.floor(d / 10000) + "/" + d + ".parquet")}'`).join(",");
-      const res = await conn.query(`
-        SELECT date, option_id, best_bid, best_offer
-        FROM read_parquet([${urls}])
-        WHERE security_id = ${secid} AND option_id IN (${ids.join(",")})
-      `);
-      const byDate = new Map();
-      for (const r of res.toArray()) {
-        const o = r.toJSON();
-        for (const k in o) if (typeof o[k] === "bigint") o[k] = Number(o[k]);
-        if (!byDate.has(o.date)) byDate.set(o.date, new Map());
-        byDate.get(o.date).set(o.option_id, o);
-      }
-      for (let j = 0; j < batch.length; j++) {
-        const rowsForDay = byDate.get(batch[j]);
-        let pnl = 0, complete = true;
-        for (const l of legs) {
-          const ex = exitPriceFor(l, rowsForDay?.get(l.opt.option_id));
-          if (ex == null) { complete = false; break; }
-          pnl += l.side * l.qty * (ex - l.prem) * CS(l.opt);
-        }
-        values[i + j] = complete ? pnl : null;
-      }
-      $("r_out").textContent = `Lade Verlauf … ${Math.min(i + B, ds.length)}/${ds.length} Handelstage`;
-      realizedCurve = { dates: ds, values: values.slice() };
-      await drawRealized();
+    // SecID-Layout: eine Abfrage ueber den ganzen Zeitraum (option_id IN (...)),
+    // statt in 10-Tage-Batches ueber viele Tagesdateien.
+    const res = await conn.query(`
+      SELECT date, option_id, best_bid, best_offer
+      FROM read_parquet('${dataUrl(`secid/${secid}.parquet`)}')
+      WHERE option_id IN (${ids.join(",")}) AND date BETWEEN ${ds[0]} AND ${ds[ds.length - 1]}
+      ORDER BY date`);
+    const byDate = new Map();
+    for (const r of res.toArray()) {
+      const o = r.toJSON();
+      for (const k in o) if (typeof o[k] === "bigint") o[k] = Number(o[k]);
+      if (!byDate.has(o.date)) byDate.set(o.date, new Map());
+      byDate.get(o.date).set(o.option_id, o);
     }
+    for (let j = 0; j < ds.length; j++) {
+      const rowsForDay = byDate.get(ds[j]);
+      let pnl = 0, complete = true;
+      for (const l of legs) {
+        const ex = exitPriceFor(l, rowsForDay?.get(l.opt.option_id));
+        if (ex == null) { complete = false; break; }
+        pnl += l.side * l.qty * (ex - l.prem) * CS(l.opt);
+      }
+      values[j] = complete ? pnl : null;
+    }
+    realizedCurve = { dates: ds, values };
+    await drawRealized();
     const dt = ((performance.now() - t0) / 1000).toFixed(1);
     const nMissing = values.filter(v => v == null).length;
     $("r_out").textContent = `Verlauf geladen (${dt} s)` + (curveAbort ? " — abgebrochen" : "") +
