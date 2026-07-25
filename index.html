@@ -783,7 +783,7 @@ function render() {
 
 // Greek-Zelle: geschätzt -> „≈ Wert" in Warn-Farbe; fehlend/Sentinel -> „—"; sonst normal
 function gcell(r, k, dec = 4) {
-  const v = r[k], est = r._estMode === "bs" || r._estMode === "limit";
+  const v = r[k], est = r._estMode === "bs";
   if (v == null || isSent(v)) return `<td class="${est ? "gest" : "gmuted"}">—</td>`;
   return est ? `<td class="gest" title="geschätzt (Black-Scholes, r=q=0)">≈ ${fmtNum(v, dec)}</td>`
              : `<td>${fmtNum(v, dec)}</td>`;
@@ -825,9 +825,10 @@ const daysTo = exp => Math.round((toDate(exp) - toDate(queryDate)) / 86400000);
 
 // ---- Sentinel-Greeks (-99,99 = OptionMetrics „nicht berechenbar") selbst schätzen ----
 // Black-Scholes (europäisch, r=q=0); σ aus dem Mid-Preis rückgerechnet. Gegen OptionMetrics
-// validiert (Delta-Fehler ~0,015, Gamma ~4 %; Vega pro 1,0, Theta annual). Fehlt der Zeitwert
-// (tief im Geld), stehen die Greeks an ihren Grenzwerten (Δ ±1/0, Rest 0). Alles wird im UI
-// als „geschätzt" gekennzeichnet.
+// validiert (Delta-Fehler ~0,015, Gamma ~4 %; Vega pro 1,0, Theta annual). Geschätzt wird NUR,
+// wo ein echter Zeitwert + zweiseitiger Markt vorliegt (dann als „geschätzt" markiert). Tief
+// im/aus dem Geld (Mid ≈ innerer Wert, kein Zeitwert) wären die Greeks trivial ±1/0 — solche
+// Werte werden bewusst WEGGELASSEN („—") statt eine nichtssagende Schätzung zu zeigen.
 const SENT = -90;                          // alles <= -90 ist der -99,99-Sentinel
 const isSent = v => v != null && v <= SENT;
 const erf = x => {                         // Abramowitz-Stegun 7.1.26 (max. Fehler 1,5e-7)
@@ -851,18 +852,15 @@ function impliedVol(price, S, K, T, cp) {
   for (let i = 0; i < 64; i++) { const m = (lo + hi) / 2; bsPrice(S, K, T, m, cp) < price ? lo = m : hi = m; }
   return (lo + hi) / 2;
 }
-// -> {delta, gamma, vega(pro 1,0), theta(annual), implied_vol|null, mode:"bs"|"limit"} | null
+// -> {delta, gamma, vega(pro 1,0), theta(annual), implied_vol, mode:"bs"} | null (nicht schätzbar)
 function estGreeks(S, K, T, cp, mid) {
   if (!(S > 0) || !(K > 0) || !(T > 0)) return null;
   const sig = mid != null ? impliedVol(mid, S, K, T, cp) : null;
-  if (sig != null) {
-    const srt = sig * Math.sqrt(T), d1 = (Math.log(S / K) + 0.5 * sig * sig * T) / srt;
-    return { delta: cp === "C" ? normCdf(d1) : normCdf(d1) - 1, gamma: normPdf(d1) / (S * srt),
-             vega: S * normPdf(d1) * Math.sqrt(T), theta: -S * normPdf(d1) * sig / (2 * Math.sqrt(T)),
-             implied_vol: sig, mode: "bs" };
-  }
-  const itm = cp === "C" ? S > K : S < K;   // kein Zeitwert -> Grenzwerte
-  return { delta: itm ? (cp === "C" ? 1 : -1) : 0, gamma: 0, vega: 0, theta: 0, implied_vol: null, mode: "limit" };
+  if (sig == null) return null;   // kein Zeitwert / kein zweiseitiger Markt -> keine belastbare Schätzung
+  const srt = sig * Math.sqrt(T), d1 = (Math.log(S / K) + 0.5 * sig * sig * T) / srt;
+  return { delta: cp === "C" ? normCdf(d1) : normCdf(d1) - 1, gamma: normPdf(d1) / (S * srt),
+           vega: S * normPdf(d1) * Math.sqrt(T), theta: -S * normPdf(d1) * sig / (2 * Math.sqrt(T)),
+           implied_vol: sig, mode: "bs" };
 }
 
 // Pro (Verfall, Strike) eine IV. Ohne Typ-Filter zählt die OTM-Seite
@@ -1445,8 +1443,10 @@ async function drawPayoff() {
   const g = { delta: 0, gamma: 0, vega: 0, theta: 0 };
   for (const l of legs) for (const k in g)   // Netto-Greeks pro Option (nicht ×Kontraktgröße)
     if (l.opt[k] != null && !isSent(l.opt[k])) g[k] += l.side * l.qty * l.opt[k];
-  const estG = legs.some(l => l.opt._estMode === "bs" || l.opt._estMode === "limit");
-  const gp = estG ? "≈ " : "", gst = estG ? "warn" : "";
+  const estG = legs.some(l => l.opt._estMode === "bs");   // geschätzte Legs im Spiel
+  const gMissing = legs.some(l => ["delta", "gamma", "vega", "theta"].some(k => l.opt[k] == null || isSent(l.opt[k])));
+  const gp = estG ? "≈ " : "", gst = (estG || gMissing) ? "warn" : "";
+  const gtile = (lbl, val, dec) => tile(lbl, gMissing ? "—" : gp + fmtNum(val, dec), "", gst);
   const money = v => v === Infinity || v === -Infinity ? "unbegrenzt" : fmtNum(v, 2);
   $("g_stats").innerHTML =
     `<div class="tiles">` +
@@ -1456,10 +1456,10 @@ async function drawPayoff() {
       tile("Breakeven", bes.length ? bes.map(b => fmtNum(b, 2)).join(" / ") : "—") +
     `</div>` +
     `<div class="tiles greeks">` +
-      tile("Delta", gp + fmtNum(g.delta, 3), "", gst) +
-      tile("Gamma", gp + fmtNum(g.gamma, 4), "", gst) +
-      tile("Vega", gp + fmtNum(g.vega, 3), "", gst) +
-      tile("Theta", gp + fmtNum(g.theta, 3), "", gst) +
+      gtile("Delta", g.delta, 3) +
+      gtile("Gamma", g.gamma, 4) +
+      gtile("Vega", g.vega, 3) +
+      gtile("Theta", g.theta, 3) +
     `</div>`;
 
   let Plotly;
