@@ -49,6 +49,8 @@
   .statuschip.warn::before { background: var(--warn); }
   .statuschip.err::before { background: var(--err); }
   .statuschip.warn { color: var(--warn); } .statuschip.err { color: var(--err); }
+  td.gest { color: var(--warn); }        /* geschätzter Greek (Black-Scholes) */
+  td.gmuted { color: var(--muted); }     /* fehlender Wert (kein Ersatz möglich) */
 
   /* Panels / Karten */
   .panel {
@@ -769,14 +771,22 @@ function render() {
     <td>${fmtNum(r.best_offer, 4)}</td>
     <td>${fmtNum(r.volume, 0)}</td>
     <td>${fmtNum(r.open_interest, 0)}</td>
-    <td>${fmtNum(r.implied_vol, 4)}</td>
-    <td>${fmtNum(r.delta, 4)}</td>
-    <td>${fmtNum(r.gamma, 4)}</td>
-    <td>${fmtNum(r.vega, 4)}</td>
-    <td>${fmtNum(r.theta, 4)}</td>
+    ${gcell(r, "implied_vol")}
+    ${gcell(r, "delta")}
+    ${gcell(r, "gamma")}
+    ${gcell(r, "vega")}
+    ${gcell(r, "theta")}
     <td>${r.option_id}</td>
   </tr>`).join("");
   $("tbl").querySelector("tbody").innerHTML = html;
+}
+
+// Greek-Zelle: geschätzt -> „≈ Wert" in Warn-Farbe; fehlend/Sentinel -> „—"; sonst normal
+function gcell(r, k, dec = 4) {
+  const v = r[k], est = r._estMode === "bs" || r._estMode === "limit";
+  if (v == null || isSent(v)) return `<td class="${est ? "gest" : "gmuted"}">—</td>`;
+  return est ? `<td class="gest" title="geschätzt (Black-Scholes, r=q=0)">≈ ${fmtNum(v, dec)}</td>`
+             : `<td>${fmtNum(v, dec)}</td>`;
 }
 
 // ---- IV-Fläche (Plotly wird erst beim ersten Öffnen geladen) ----
@@ -812,6 +822,48 @@ function readyPlot(el) {
 
 const toDate = i => new Date(Math.floor(i / 10000), Math.floor(i / 100) % 100 - 1, i % 100);
 const daysTo = exp => Math.round((toDate(exp) - toDate(queryDate)) / 86400000);
+
+// ---- Sentinel-Greeks (-99,99 = OptionMetrics „nicht berechenbar") selbst schätzen ----
+// Black-Scholes (europäisch, r=q=0); σ aus dem Mid-Preis rückgerechnet. Gegen OptionMetrics
+// validiert (Delta-Fehler ~0,015, Gamma ~4 %; Vega pro 1,0, Theta annual). Fehlt der Zeitwert
+// (tief im Geld), stehen die Greeks an ihren Grenzwerten (Δ ±1/0, Rest 0). Alles wird im UI
+// als „geschätzt" gekennzeichnet.
+const SENT = -90;                          // alles <= -90 ist der -99,99-Sentinel
+const isSent = v => v != null && v <= SENT;
+const erf = x => {                         // Abramowitz-Stegun 7.1.26 (max. Fehler 1,5e-7)
+  const s = x < 0 ? -1 : 1; x = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * x);
+  return s * (1 - (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t) * Math.exp(-x * x));
+};
+const normCdf = x => 0.5 * (1 + erf(x / Math.SQRT2));
+const normPdf = x => Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
+const yearFrac = (dInt, expInt) => Math.max(0, (toDate(expInt) - toDate(dInt)) / 86400000) / 365;
+function bsPrice(S, K, T, sig, cp) {
+  const srt = sig * Math.sqrt(T);
+  const d1 = (Math.log(S / K) + 0.5 * sig * sig * T) / srt, d2 = d1 - srt;
+  return cp === "C" ? S * normCdf(d1) - K * normCdf(d2) : K * normCdf(-d2) - S * normCdf(-d1);
+}
+function impliedVol(price, S, K, T, cp) {
+  const intr = Math.max(0, cp === "C" ? S - K : K - S);
+  if (!(price > intr + 1e-6) || !(T > 0)) return null;    // kein Zeitwert -> nicht rückrechenbar
+  let lo = 1e-4, hi = 5;
+  if (bsPrice(S, K, T, hi, cp) < price) return null;       // Preis über No-Arbitrage-Grenze
+  for (let i = 0; i < 64; i++) { const m = (lo + hi) / 2; bsPrice(S, K, T, m, cp) < price ? lo = m : hi = m; }
+  return (lo + hi) / 2;
+}
+// -> {delta, gamma, vega(pro 1,0), theta(annual), implied_vol|null, mode:"bs"|"limit"} | null
+function estGreeks(S, K, T, cp, mid) {
+  if (!(S > 0) || !(K > 0) || !(T > 0)) return null;
+  const sig = mid != null ? impliedVol(mid, S, K, T, cp) : null;
+  if (sig != null) {
+    const srt = sig * Math.sqrt(T), d1 = (Math.log(S / K) + 0.5 * sig * sig * T) / srt;
+    return { delta: cp === "C" ? normCdf(d1) : normCdf(d1) - 1, gamma: normPdf(d1) / (S * srt),
+             vega: S * normPdf(d1) * Math.sqrt(T), theta: -S * normPdf(d1) * sig / (2 * Math.sqrt(T)),
+             implied_vol: sig, mode: "bs" };
+  }
+  const itm = cp === "C" ? S > K : S < K;   // kein Zeitwert -> Grenzwerte
+  return { delta: itm ? (cp === "C" ? 1 : -1) : 0, gamma: 0, vega: 0, theta: 0, implied_vol: null, mode: "limit" };
+}
 
 // Pro (Verfall, Strike) eine IV. Ohne Typ-Filter zählt die OTM-Seite
 // (kleinstes |Delta|) — Standard für IV-Flächen, da der Underlying-Kurs fehlt.
@@ -999,7 +1051,7 @@ async function resolveSpot() {
     const est = estimateSpotFromDelta();
     if (est) spot = { value: est, source: "delta", permno: p };
   }
-  if (!spot) { $("spotinfo").textContent = "Spot: nicht verfügbar"; return; }
+  if (!spot) { $("spotinfo").textContent = "Spot: nicht verfügbar"; applyChainGreekEstimates(); return; }
   const v = spot.value.toLocaleString("de-DE", { maximumFractionDigits: 2 });
   if (spot.source === "crsp") {
     $("spotinfo").textContent = `Spot ${v} (CRSP)`;
@@ -1010,8 +1062,29 @@ async function resolveSpot() {
     $("spotinfo").title = "Kein CRSP-Kurs für dieses Underlying (z. B. Index) — " +
       "Spot aus der 0,5-Delta-Kreuzung des nächsten Verfalls interpoliert.";
   }
-  if (view === "strategy") drawPayoff();   // Spot-Marker nachziehen
-  else if (view === "surface" && $("iv_xaxis").value !== "strike") renderSurface();   // Moneyness ggf. nachladen
+  applyChainGreekEstimates();   // Spot da -> Sentinel-Greeks schätzen + Ansicht neu zeichnen
+}
+
+// Sentinel-Greeks der Kette schätzen (Spot = CRSP oder Delta-Schätzung), dann neu rendern.
+// Ohne Spot werden die -99,99 nur zu „—" neutralisiert — es wird nie ein Wert erfunden.
+function applyChainGreekEstimates() {
+  const S = spot ? spot.value : null;
+  for (const r of rows) {
+    if (r._estDone) continue;
+    if (!["delta", "gamma", "vega", "theta", "implied_vol"].some(k => isSent(r[k]))) continue;
+    r._estDone = true;
+    const mid = (r.best_bid > 0 && r.best_offer > 0) ? (r.best_bid + r.best_offer) / 2 : null;  // nur echter zweiseitiger Markt
+    const g = S ? estGreeks(S, r.strike / 1000, yearFrac(queryDate, r.expiration), r.call_put, mid) : null;
+    if (g) {
+      r.delta = g.delta; r.gamma = g.gamma; r.vega = g.vega; r.theta = g.theta;
+      r.implied_vol = g.implied_vol;   // bei "limit" = null -> Anzeige „—"
+      r._estMode = g.mode;
+    } else {
+      for (const k of ["delta", "gamma", "vega", "theta", "implied_vol"]) if (isSent(r[k])) r[k] = null;
+      r._estMode = "none";
+    }
+  }
+  renderView();
 }
 
 // ---- Zeitreihe: Verfall + Typ + Strike wählen die Option, dann Batch-Abfrage ----
@@ -1178,10 +1251,24 @@ $("s_load").onclick = async () => {
       for (const k in o) if (typeof o[k] === "bigint") o[k] = Number(o[k]);
       points.push(o);
     }
+    // Sentinel-Greeks pro Punkt schätzen, wo ein Spot (CRSP-Underlying) vorliegt
+    let nEst = 0;
+    if (seriesData.underlying && seriesData.underlying.length) {
+      const spotBy = new Map(seriesData.underlying.map(u => [u.date, u.prc]));
+      for (const p of points) {
+        if (!["delta", "gamma", "vega", "theta", "implied_vol"].some(k => isSent(p[k]))) continue;
+        const S = spotBy.get(p.date);
+        const mid = (p.best_bid > 0 && p.best_offer > 0) ? (p.best_bid + p.best_offer) / 2 : null;  // nur echter zweiseitiger Markt
+        const g = S ? estGreeks(S, opt.strike / 1000, yearFrac(p.date, opt.expiration), opt.call_put, mid) : null;
+        if (g) { p.delta = g.delta; p.gamma = g.gamma; p.vega = g.vega; p.theta = g.theta; p.implied_vol = g.implied_vol; p._est = true; nEst++; }
+      }
+    }
+    seriesData.nEst = nEst;
     setProg(dates.length);
     await drawSeries();
     const dt = ((performance.now() - t0) / 1000).toFixed(1);
     $("s_prog").textContent = `${points.length.toLocaleString("de-DE")} Punkte geladen (${dt} s)` +
+      (seriesData.nEst ? ` · ${seriesData.nEst.toLocaleString("de-DE")} Greeks geschätzt (BS)` : "") +
       (seriesAbort ? " — abgebrochen" : "") +
       (points.length ? "" : " — Option war im Zeitraum nicht notiert.");
   } catch (e) {
@@ -1212,12 +1299,21 @@ async function drawSeries() {
     `${opt.call_put === "C" ? "Call" : "Put"} ${fmtNum(opt.strike / 1000, 3)} · ` +
     `Verfall ${fmtDate(opt.expiration)} · Option-ID ${opt.option_id}`;
 
+  const isGreek = ["implied_vol", "delta", "gamma", "vega", "theta"].includes($("s_metric").value);
+  const yOf = p => { const y = m.f(p); return (y == null || isSent(y)) ? null : y; };   // rohe -99,99 nie plotten
+  const estPts = isGreek ? ps.filter(p => p._est) : [];
   const traces = [{
-    type: "scatter", mode: "lines+markers", name: m.label,
-    x: ps.map(p => fmtDate(p.date)), y: ps.map(m.f),
+    type: "scatter", mode: "lines+markers", name: m.label, connectgaps: false,
+    x: ps.map(p => fmtDate(p.date)), y: ps.map(yOf),
     marker: { size: 4, color: C("--accent") }, line: { color: C("--accent"), width: 1.5 },
     hovertemplate: "%{x}<br>" + m.label + ": %{y:,.4~f}<extra></extra>",
   }];
+  if (estPts.length) traces.push({
+    type: "scatter", mode: "markers", name: "≈ geschätzt (BS)",
+    x: estPts.map(p => fmtDate(p.date)), y: estPts.map(yOf),
+    marker: { size: 6, color: C("--warn"), symbol: "diamond" },
+    hovertemplate: "%{x}<br>≈ " + m.label + " (geschätzt): %{y:,.4~f}<extra></extra>",
+  });
   const u = seriesData.underlying;
   if (u && u.length) traces.push({
     type: "scatter", mode: "lines", name: "Underlying (CRSP)", yaxis: "y2",
@@ -1230,7 +1326,8 @@ async function drawSeries() {
     font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
     margin: { l: 60, r: 55, t: 40, b: 45 },
     title: { text: title, font: { size: 13 } },
-    showlegend: false,
+    showlegend: estPts.length > 0,
+    legend: { orientation: "h", y: 1.02, yanchor: "bottom", font: { size: 11 } },
     xaxis: { title: { text: "Handelstag" }, gridcolor: C("--border"), zeroline: false, type: "date" },
     yaxis: { title: { text: m.label }, gridcolor: C("--border"), zeroline: false },
     yaxis2: { overlaying: "y", side: "right", showgrid: false, zeroline: false,
@@ -1347,7 +1444,9 @@ async function drawPayoff() {
   const maxL = slopeR < 0 ? -Infinity : Math.min(...yAll);
   const g = { delta: 0, gamma: 0, vega: 0, theta: 0 };
   for (const l of legs) for (const k in g)   // Netto-Greeks pro Option (nicht ×Kontraktgröße)
-    if (l.opt[k] != null) g[k] += l.side * l.qty * l.opt[k];
+    if (l.opt[k] != null && !isSent(l.opt[k])) g[k] += l.side * l.qty * l.opt[k];
+  const estG = legs.some(l => l.opt._estMode === "bs" || l.opt._estMode === "limit");
+  const gp = estG ? "≈ " : "", gst = estG ? "warn" : "";
   const money = v => v === Infinity || v === -Infinity ? "unbegrenzt" : fmtNum(v, 2);
   $("g_stats").innerHTML =
     `<div class="tiles">` +
@@ -1357,10 +1456,10 @@ async function drawPayoff() {
       tile("Breakeven", bes.length ? bes.map(b => fmtNum(b, 2)).join(" / ") : "—") +
     `</div>` +
     `<div class="tiles greeks">` +
-      tile("Delta", fmtNum(g.delta, 3)) +
-      tile("Gamma", fmtNum(g.gamma, 4)) +
-      tile("Vega", fmtNum(g.vega, 3)) +
-      tile("Theta", fmtNum(g.theta, 3)) +
+      tile("Delta", gp + fmtNum(g.delta, 3), "", gst) +
+      tile("Gamma", gp + fmtNum(g.gamma, 4), "", gst) +
+      tile("Vega", gp + fmtNum(g.vega, 3), "", gst) +
+      tile("Theta", gp + fmtNum(g.theta, 3), "", gst) +
     `</div>`;
 
   let Plotly;
