@@ -82,7 +82,7 @@
     border: 1px solid var(--border); border-radius: 6px; padding: 0.45rem 0.6rem;
   }
   input, select { font-family: var(--sans); }
-  input[type=number], input#secid, input#s_von, input#s_bis { font-family: var(--mono); }
+  input[type=number], input#secid { font-family: var(--mono); }
   input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   select { cursor: pointer; }
   button { cursor: pointer; }
@@ -311,10 +311,22 @@
   <div id="series" class="hidden">
     <div class="toolbar" style="margin-top:0">
       <label style="flex-direction:row;align-items:center;gap:0.4rem">von
-        <input type="text" id="s_von" placeholder="JJJJ-MM-TT" inputmode="numeric" maxlength="10" style="width:8rem">
+        <span style="display:flex;gap:0.3rem;align-items:center">
+          <button type="button" class="ghost iconbtn" id="sv_prev" title="vorheriger Handelstag">&#9664;</button>
+          <select id="sv_y" title="Jahr"></select>
+          <select id="sv_m" title="Monat"></select>
+          <select id="sv_d" title="Tag"></select>
+          <button type="button" class="ghost iconbtn" id="sv_next" title="n&auml;chster Handelstag">&#9654;</button>
+        </span>
       </label>
       <label style="flex-direction:row;align-items:center;gap:0.4rem">bis
-        <input type="text" id="s_bis" placeholder="JJJJ-MM-TT" inputmode="numeric" maxlength="10" style="width:8rem">
+        <span style="display:flex;gap:0.3rem;align-items:center">
+          <button type="button" class="ghost iconbtn" id="sb_prev" title="vorheriger Handelstag">&#9664;</button>
+          <select id="sb_y" title="Jahr"></select>
+          <select id="sb_m" title="Monat"></select>
+          <select id="sb_d" title="Tag"></select>
+          <button type="button" class="ghost iconbtn" id="sb_next" title="n&auml;chster Handelstag">&#9654;</button>
+        </span>
       </label>
       <label style="flex-direction:row;align-items:center;gap:0.4rem">Metrik
         <select id="s_metric">
@@ -551,15 +563,19 @@ function fillSel(el, vals, want, fmt) {
   return chosen;
 }
 
-function setDatePicker(want) {   // want: int YYYYMMDD, landet auf einem Handelstag
+// Jahr/Monat/Tag-Picker (nur echte Handelstage) für ein Präfix: "d"=Haupt, "sv"/"sb"=Zeitreihe von/bis
+function fillDatePicker(p, want) {
   const D = manifest.dates;
   const years = [...new Set(D.map(d => Math.floor(d / 10000)))];
-  const y = fillSel($("d_y"), years, Math.floor(want / 10000));
+  const y = fillSel($(p + "_y"), years, Math.floor(want / 10000));
   const months = [...new Set(D.filter(d => Math.floor(d / 10000) === y).map(d => Math.floor(d / 100) % 100))];
-  const m = fillSel($("d_m"), months, Math.floor(want / 100) % 100, v => MON[v - 1]);
+  const m = fillSel($(p + "_m"), months, Math.floor(want / 100) % 100, v => MON[v - 1]);
   const days = D.filter(d => Math.floor(d / 100) === y * 100 + m).map(d => d % 100);
-  fillSel($("d_d"), days, want % 100, pad2);
+  const dd = fillSel($(p + "_d"), days, want % 100, pad2);
+  return y * 10000 + m * 100 + dd;
 }
+const pickerInt = p => (+$(p + "_y").value * 10000 + +$(p + "_m").value * 100 + +$(p + "_d").value) || 0;
+const setDatePicker = want => fillDatePicker("d", want);
 
 function onDateChange() {
   // Bei Tickerwechseln entscheidet das Datum, welche SecID gemeint ist
@@ -594,7 +610,7 @@ $("d_prev").onclick = () => stepDay(-1);
 $("d_next").onclick = () => stepDay(1);
 
 // ---- Ticker <-> SecID auflösen, Info live anzeigen ----
-const dateInt = () => (+$("d_y").value * 10000 + +$("d_m").value * 100 + +$("d_d").value) || 0;
+const dateInt = () => pickerInt("d");
 // Eintrag, dessen Zeitraum das Datum enthält, sonst der mit den meisten Handelstagen
 const bestEntry = (list, d) => list.find(e => d >= e[1] && d <= e[2]) || list[0];
 
@@ -1018,14 +1034,8 @@ function seriesSelection() {
   return opt || null;
 }
 
-const intToInput = i => fmtDate(i);   // int YYYYMMDD -> "JJJJ-MM-TT"
-const inputToInt = v => {   // toleriert JJJJ-MM-TT, JJJJMMTT, unpadded etc.
-  const m = String(v).match(/(\d{4})\D*(\d{1,2})\D*(\d{1,2})/);
-  return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) : 0;
-};
-
 function seriesDayCount() {
-  const von = inputToInt($("s_von").value), bis = inputToInt($("s_bis").value);
+  const von = pickerInt("sv"), bis = pickerInt("sb");
   return manifest.dates.filter(d => d >= von && d <= bis).length;
 }
 
@@ -1060,6 +1070,11 @@ function renderSeries() {
   $("rowcount").textContent = "";
   const opt = populateStrikes();
   $("s_load").disabled = seriesLoading || !opt;
+  if (!$("sv_y").options.length) {   // von/bis initial mit dem SecID-Datenbereich vorbelegen (nie leer)
+    const inf = manifest.secids[$("secid").value.trim()];
+    fillDatePicker("sv", inf ? inf[0] : manifest.dates[0]);
+    fillDatePicker("sb", inf ? inf[1] : manifest.dates[manifest.dates.length - 1]);
+  }
   if (!opt) {
     $("s_prog").textContent = "Verfall und Typ (Call/Put) wählen.";
     clearPlot($("serieschart"));
@@ -1074,8 +1089,8 @@ function renderSeries() {
     from.setDate(from.getDate() - 182);
     const fromInt = from.getFullYear() * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
     const last = manifest.dates[manifest.dates.length - 1];
-    $("s_von").value = intToInput(Math.max(fromInt, manifest.dates[0], info ? info[0] : 0));
-    $("s_bis").value = intToInput(Math.min(opt.expiration, last, info ? info[1] : last));
+    fillDatePicker("sv", Math.max(fromInt, manifest.dates[0], info ? info[0] : 0));
+    fillDatePicker("sb", Math.min(opt.expiration, last, info ? info[1] : last));
   }
 
   if (seriesData && seriesData.optionId === opt.option_id) { drawSeries(); return; }
@@ -1088,21 +1103,28 @@ function renderSeries() {
 
 $("f_strike").onchange = renderView;
 $("iv_xaxis").onchange = renderView;
-for (const id of ["s_von", "s_bis"]) $(id).onchange = () => {
-  const el = $(id), n = inputToInt(el.value);
-  if (n) {   // auf Datenbereich klemmen + kanonisch als JJJJ-MM-TT anzeigen
-    const lo = manifest.dates[0], hi = manifest.dates[manifest.dates.length - 1];
-    el.value = intToInput(Math.min(Math.max(n, lo), hi));
-  }
+function onSeriesRange() {
   if (!seriesLoading && view === "series" && seriesSelection())
     $("s_prog").textContent = `${seriesDayCount().toLocaleString("de-DE")} Handelstage im Zeitraum — „Zeitreihe laden“ klicken.`;
-};
+}
+// von/bis-Picker genau wie der Haupt-Handelstag verdrahten (Jahr/Monat kaskadieren, ◀/▶ = Handelstag)
+for (const p of ["sv", "sb"]) {
+  $(p + "_y").onchange = () => { fillDatePicker(p, pickerInt(p)); onSeriesRange(); };
+  $(p + "_m").onchange = () => { fillDatePicker(p, pickerInt(p)); onSeriesRange(); };
+  $(p + "_d").onchange = onSeriesRange;
+  const step = dir => () => {
+    const D = manifest.dates, j = Math.min(D.length - 1, Math.max(0, D.indexOf(pickerInt(p)) + dir));
+    fillDatePicker(p, D[j]); onSeriesRange();
+  };
+  $(p + "_prev").onclick = step(-1);
+  $(p + "_next").onclick = step(1);
+}
 
 
 $("s_load").onclick = async () => {
   const opt = seriesSelection();
   if (!opt || seriesLoading) return;
-  const von = inputToInt($("s_von").value), bis = inputToInt($("s_bis").value);
+  const von = pickerInt("sv"), bis = pickerInt("sb");
   const dates = manifest.dates.filter(d => d >= von && d <= bis);
   if (!dates.length) { $("s_prog").textContent = "Kein Handelstag im gewählten Zeitraum."; return; }
 
