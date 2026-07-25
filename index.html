@@ -26,7 +26,7 @@
 
   /* Kopfleiste */
   .appbar {
-    position: sticky; top: 0; z-index: 20; display: flex; align-items: baseline;
+    position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: baseline;
     gap: 0.9rem; padding: 0.85rem 0 0.7rem; margin-bottom: 1.1rem;
     background: linear-gradient(var(--bg) 78%, transparent);
     border-bottom: 1px solid var(--border);
@@ -39,7 +39,7 @@
   .appbar .grow { flex: 1; }
   .statuschip {
     font-size: 0.78rem; color: var(--secondary); display: inline-block;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: min(48ch, 42vw);
+    white-space: normal; margin-left: auto; text-align: right;
   }
   .statuschip::before {
     content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
@@ -232,6 +232,7 @@
 </div>
 
 <form id="qform" class="panel query">
+  <button type="button" class="ghost" id="rnd" title="Zufällige SecID an einem zufälligen Handelstag laden">&#127922; Zufall</button>
   <label>Handelstag
     <span style="display:flex;gap:0.3rem;align-items:center">
       <button type="button" class="ghost iconbtn" id="d_prev" title="vorheriger Handelstag">&#9664;</button>
@@ -310,10 +311,10 @@
   <div id="series" class="hidden">
     <div class="toolbar" style="margin-top:0">
       <label style="flex-direction:row;align-items:center;gap:0.4rem">von
-        <input type="date" id="s_von" min="1996-01-04" max="2021-06-30">
+        <input type="text" id="s_von" placeholder="JJJJ-MM-TT" inputmode="numeric" maxlength="10" style="width:8rem">
       </label>
       <label style="flex-direction:row;align-items:center;gap:0.4rem">bis
-        <input type="date" id="s_bis" min="1996-01-04" max="2021-06-30">
+        <input type="text" id="s_bis" placeholder="JJJJ-MM-TT" inputmode="numeric" maxlength="10" style="width:8rem">
       </label>
       <label style="flex-direction:row;align-items:center;gap:0.4rem">Metrik
         <select id="s_metric">
@@ -527,10 +528,10 @@ const duckdbReady = (async () => {
     await manifestReady;
     await tickersReady;
     setDatePicker(manifest.dates[manifest.dates.length - 1]);
-    status(`Bereit — ${manifest.dates.length.toLocaleString("de-DE")} Handelstage, ` +
+    status(`Bereit · ${manifest.dates.length.toLocaleString("de-DE")} Handelstage · ` +
            `${Object.keys(manifest.secids).length.toLocaleString("de-DE")} SecIDs` +
-           (tickers ? `, ${tickerKeys.length.toLocaleString("de-DE")} Ticker verfügbar.`
-                    : " verfügbar. (tickers.json fehlt — Suche nur per SecID)"), "ok");
+           (tickers ? ` · ${tickerKeys.length.toLocaleString("de-DE")} Ticker`
+                    : " · Suche nur per SecID (tickers.json fehlt)"), "ok");
   } catch (e) {
     status("Fehler beim Laden des Manifests: " + e.message +
            " — Datenquelle in den Einstellungen prüfen.", "err");
@@ -568,6 +569,19 @@ function onDateChange() {
 $("d_y").onchange = () => { setDatePicker(dateInt()); onDateChange(); };
 $("d_m").onchange = () => { setDatePicker(dateInt()); onDateChange(); };
 $("d_d").onchange = onDateChange;
+
+// Zufalls-Knopf: zufällige SecID an einem zufälligen Handelstag ihres Zeitraums
+$("rnd").onclick = () => {
+  if (!manifest) { status("Manifest nicht geladen — Einstellungen prüfen.", "err"); return; }
+  const ids = Object.keys(manifest.secids);
+  const id = ids[Math.floor(Math.random() * ids.length)];
+  const [first, last] = manifest.secids[id];
+  const days = manifest.dates.filter(d => d >= first && d <= last);
+  setDatePicker(days.length ? days[Math.floor(Math.random() * days.length)] : last);
+  $("ticker").value = "";
+  $("secid").value = id;
+  $("go").click();
+};
 
 function stepDay(dir) {
   if (!manifest) return;
@@ -1004,8 +1018,11 @@ function seriesSelection() {
   return opt || null;
 }
 
-const intToInput = i => fmtDate(i);
-const inputToInt = v => parseInt(v.replaceAll("-", ""), 10) || 0;
+const intToInput = i => fmtDate(i);   // int YYYYMMDD -> "JJJJ-MM-TT"
+const inputToInt = v => {   // toleriert JJJJ-MM-TT, JJJJMMTT, unpadded etc.
+  const m = String(v).match(/(\d{4})\D*(\d{1,2})\D*(\d{1,2})/);
+  return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) : 0;
+};
 
 function seriesDayCount() {
   const von = inputToInt($("s_von").value), bis = inputToInt($("s_bis").value);
@@ -1072,6 +1089,11 @@ function renderSeries() {
 $("f_strike").onchange = renderView;
 $("iv_xaxis").onchange = renderView;
 for (const id of ["s_von", "s_bis"]) $(id).onchange = () => {
+  const el = $(id), n = inputToInt(el.value);
+  if (n) {   // auf Datenbereich klemmen + kanonisch als JJJJ-MM-TT anzeigen
+    const lo = manifest.dates[0], hi = manifest.dates[manifest.dates.length - 1];
+    el.value = intToInput(Math.min(Math.max(n, lo), hi));
+  }
   if (!seriesLoading && view === "series" && seriesSelection())
     $("s_prog").textContent = `${seriesDayCount().toLocaleString("de-DE")} Handelstage im Zeitraum — „Zeitreihe laden“ klicken.`;
 };
@@ -1302,8 +1324,8 @@ async function drawPayoff() {
   const maxP = slopeR > 0 ? Infinity : Math.max(...yAll);
   const maxL = slopeR < 0 ? -Infinity : Math.min(...yAll);
   const g = { delta: 0, gamma: 0, vega: 0, theta: 0 };
-  for (const l of legs) for (const k in g)
-    if (l.opt[k] != null) g[k] += l.side * l.qty * l.opt[k] * CS(l.opt);
+  for (const l of legs) for (const k in g)   // Netto-Greeks pro Option (nicht ×Kontraktgröße)
+    if (l.opt[k] != null) g[k] += l.side * l.qty * l.opt[k];
   const money = v => v === Infinity || v === -Infinity ? "unbegrenzt" : fmtNum(v, 2);
   $("g_stats").innerHTML =
     `<div class="tiles">` +
@@ -1313,10 +1335,10 @@ async function drawPayoff() {
       tile("Breakeven", bes.length ? bes.map(b => fmtNum(b, 2)).join(" / ") : "—") +
     `</div>` +
     `<div class="tiles greeks">` +
-      tile("Delta", fmtNum(g.delta, 1)) +
-      tile("Gamma", fmtNum(g.gamma, 2)) +
-      tile("Vega", fmtNum(g.vega, 1)) +
-      tile("Theta", fmtNum(g.theta, 1)) +
+      tile("Delta", fmtNum(g.delta, 3)) +
+      tile("Gamma", fmtNum(g.gamma, 4)) +
+      tile("Vega", fmtNum(g.vega, 3)) +
+      tile("Theta", fmtNum(g.theta, 3)) +
     `</div>`;
 
   let Plotly;
