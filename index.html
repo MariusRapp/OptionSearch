@@ -196,6 +196,9 @@
 
   /* Kleintext / Fortschritt / Hinweise */
   #g_hint, #s_prog { font-size: 0.83rem; color: var(--muted); }
+  #g_hint { display: block; margin: 0.15rem 0 0.3rem; }
+  #g_hint:empty { margin: 0; }
+  #g_hint.warn { color: var(--warn); }
   #g_stats, #mc_out, #r_out { display: block; margin-top: 0.7rem; font-size: 0.83rem; color: var(--muted); }
   #g_stats:empty, #mc_out:empty, #r_out:empty { margin: 0; }
   .note-warn { color: var(--warn); }
@@ -358,23 +361,51 @@
   </div>
   <div id="strategy" class="hidden">
     <section class="card">
-      <div class="card-h"><span class="idx">1</span> Aufbau</div>
+      <div class="card-h"><span class="idx">1</span> Aufbau
+        <span class="aside" id="g_name"></span>
+      </div>
       <div class="toolbar" style="margin-top:0">
+        <label>Vorlage
+          <select id="g_tpl"></select>
+        </label>
+        <label title="Verfall f&uuml;r alle Legs bzw. den vorderen Verfall bei Zeitspreads">Verfall
+          <select id="g_tpl_e1"></select>
+        </label>
+        <label id="g_tpl_e2wrap" title="Nur f&uuml;r Zeitspreads: der hintere (sp&auml;tere) Verfall">2.&nbsp;Verfall
+          <select id="g_tpl_e2"></select>
+        </label>
+        <label title="Strike-Abstand der Vorlage in Prozent des Underlying-Kurses">Breite&nbsp;(%)
+          <input type="number" id="g_tpl_w" value="5" min="0.5" max="50" step="0.5" style="width:4.5rem">
+        </label>
+        <button type="button" class="primary" id="g_tpl_go">Vorlage anwenden</button>
+      </div>
+      <div class="toolbar">
         <label>Aktion
           <select id="g_side">
             <option value="1">Kauf (Long)</option>
             <option value="-1">Verkauf (Short)</option>
           </select>
         </label>
+        <label>Instrument
+          <select id="g_kind">
+            <option value="opt">Option (aus der Kette)</option>
+            <option value="stock">Aktie (100 St&uuml;ck)</option>
+          </select>
+        </label>
         <label>Menge
           <input type="number" id="g_qty" value="1" min="1" style="width:4.5rem">
         </label>
         <button type="button" class="primary" id="g_add">Leg hinzuf&uuml;gen</button>
-        <span id="g_hint"></span>
+        <button type="button" class="ghost" id="g_clear">Alle Legs entfernen</button>
+        <span class="spacer"></span>
+        <label title="Stichtag des Diagramms. Legs, die dann noch laufen, werden mit Black-Scholes bewertet (Modellwert, markiert).">Bewertung&nbsp;zum
+          <select id="g_eval"></select>
+        </label>
       </div>
+      <span id="g_hint"></span>
       <div class="tablewrap" style="max-height:30vh"><table id="g_legs">
         <thead><tr>
-          <th>Aktion</th><th>Typ</th><th>Strike</th><th>Verfall</th><th>Menge</th>
+          <th>Aktion</th><th>Instrument</th><th>Strike</th><th>Verfall</th><th>Menge</th>
           <th>Pr&auml;mie</th><th>IV</th><th>Delta</th><th></th>
         </tr></thead>
         <tbody></tbody>
@@ -424,7 +455,7 @@
       <div id="r_out"></div>
       <div class="tablewrap" style="max-height:22vh"><table id="r_legs">
         <thead><tr>
-          <th>Aktion</th><th>Typ</th><th>Strike</th><th>Einstieg</th>
+          <th>Aktion</th><th>Instrument</th><th>Strike</th><th>Verfall</th><th>Einstieg</th>
           <th title="Bid bei Glattstellung einer Kauf-Position, Ask bei Glattstellung einer Verkauf-Position">Kurs am Auswertungstag</th>
           <th>Beitrag</th>
         </tr></thead>
@@ -720,6 +751,7 @@ function buildFilters() {
   $("f_exp").innerHTML = '<option value="">alle</option>' +
     exps.map(e => `<option value="${e}">${fmtDate(e)}</option>`).join("");
   $("f_cp").value = "";
+  fillTemplateExps();   // Verfalls-Auswahl der Strategievorlagen mitziehen
 }
 $("f_exp").onchange = renderView;
 $("f_cp").onchange = renderView;
@@ -1333,28 +1365,117 @@ async function drawSeries() {
   }, { responsive: true, displaylogo: false });
 }
 
-// ---- Strategie-Builder: Legs aus der Kette, Payoff zum Verfall ----
-const CS = o => o.contract_size > 0 ? o.contract_size : 100;
+// ---- Strategie-Builder ----------------------------------------------------
+// Legs dürfen unterschiedliche Verfälle haben (Calendar, Diagonal, PMCC …).
+// Bewertet wird zu einem wählbaren Bewertungstag — Standard: der FRÜHESTE Verfall
+// der Position, denn nur bis dahin lässt sie sich vollständig am Markt schließen:
+//   Verfall <= Bewertungstag → innerer Wert (echte Auszahlung)
+//   Verfall >  Bewertungstag → Black-Scholes-Modellwert (r = q = 0, IV vom Einstieg)
+// Modellwerte sind überall als geschätzt markiert (≈, Warnfarbe) — nie als Fakt.
+// Neben Optionen gibt es ein Aktien-Leg (100 Stück, Einstieg = Spot) — nötig für
+// Covered Call, Protective Put und Collar.
+const CS = l => l.kind === "stock" ? 100 : (l.opt.contract_size > 0 ? l.opt.contract_size : 100);
+const optLegs = () => legs.filter(l => l.kind !== "stock");
+const legExps = () => [...new Set(optLegs().map(l => l.opt.expiration))].sort((a, b) => a - b);
+const usableIv = v => (v != null && v > 0 && !isSent(v)) ? v : null;
+const hint = (msg, warn = false) => {
+  $("g_hint").textContent = msg;
+  $("g_hint").className = warn ? "warn" : "";
+};
 
-function pnlAt(S) {
+function makeOptLeg(side, qty, opt) {
+  const prem = side > 0 ? opt.best_offer : opt.best_bid;   // Kauf zum Ask, Verkauf zum Bid
+  return { kind: "opt", side, qty, prem, opt, sigma: usableIv(opt.implied_vol) };
+}
+const makeStockLeg = (side, qty) =>
+  ({ kind: "stock", side, qty, prem: spot.value, opt: null, sigma: null });
+
+// Bewertungstag: gewählter Wert, sonst frühester Verfall (bzw. der Abfragetag)
+function evalDate() {
+  const es = legExps(), v = +($("g_eval").value || 0);
+  if (v === queryDate || es.includes(v)) return v;
+  return es.length ? es[0] : queryDate;
+}
+
+function fillEvalPicker() {
+  const es = legExps(), prev = +($("g_eval").value || 0);
+  $("g_eval").innerHTML =
+    [`<option value="${queryDate}">heute · ${fmtDate(queryDate)}</option>`]
+      .concat(es.map(e => `<option value="${e}">Verfall · ${fmtDate(e)} (${daysTo(e)} T)</option>`)).join("");
+  $("g_eval").value = (prev === queryDate || es.includes(prev)) ? prev : (es.length ? es[0] : queryDate);
+  $("g_eval").disabled = !legs.length;
+}
+$("g_eval").onchange = () => { drawPayoff(); };
+
+// Vorberechnete Bewertungsparameter je Leg — einmal pro Zeichnung/Simulation,
+// damit die Monte-Carlo-Schleife (bis 200k Pfade) nicht pro Pfad neu ableitet.
+// evalDay = null → alles zum inneren Wert (Vergleich „bei sofortigem Verfall“).
+function buildModel(evalDay) {
+  return legs.map(l => ({
+    stock: l.kind === "stock",
+    side: l.side, qty: l.qty, cs: CS(l), prem: l.prem,
+    cp: l.kind === "stock" ? null : l.opt.call_put,
+    K: l.kind === "stock" ? 0 : l.opt.strike / 1000,
+    T: (evalDay == null || l.kind === "stock") ? 0 : yearFrac(evalDay, l.opt.expiration),
+    sig: l.sigma,
+  }));
+}
+
+function pnlModel(model, S) {
   let p = 0;
-  for (const l of legs) {
-    const K = l.opt.strike / 1000;
-    const intr = l.opt.call_put === "C" ? Math.max(S - K, 0) : Math.max(K - S, 0);
-    p += l.side * l.qty * (intr - l.prem) * CS(l.opt);
+  for (const m of model) {
+    let v;
+    if (m.stock) v = S;
+    else {
+      const intr = m.cp === "C" ? Math.max(S - m.K, 0) : Math.max(m.K - S, 0);
+      // ohne Restlaufzeit oder ohne verwertbare IV: innerer Wert statt erfundener Modellwert
+      v = (m.T > 0 && m.sig > 0 && S > 0) ? bsPrice(S, m.K, m.T, m.sig, m.cp) : intr;
+    }
+    p += m.side * m.qty * (v - m.prem) * m.cs;
   }
   return p;
 }
+const pnlAt = (S, evalDay = evalDate()) => pnlModel(buildModel(evalDay), S);
 
 function payoffGrid() {
-  const ks = legs.map(l => l.opt.strike / 1000);
-  const ref = spot ? spot.value : ks.reduce((a, b) => a + b, 0) / ks.length;
-  const lo = Math.max(0, Math.min(...ks, ref) * 0.6);
-  const hi = Math.max(...ks, ref) * 1.4;
-  const xs = new Set(ks);
-  for (let i = 0; i <= 160; i++) xs.add(lo + (hi - lo) * i / 160);
-  if (spot) xs.add(spot.value);
+  const pts = optLegs().map(l => l.opt.strike / 1000);
+  if (spot) pts.push(spot.value);
+  if (!pts.length) return [];
+  const lo = Math.max(0, Math.min(...pts) * 0.6), hi = Math.max(...pts) * 1.4;
+  const xs = new Set(pts);
+  for (let i = 0; i <= 200; i++) xs.add(lo + (hi - lo) * i / 200);
   return [...xs].sort((a, b) => a - b);
+}
+
+// Nulldurchgänge als exakte Stützpunkte einfügen: nur so treffen die grüne und
+// die rote Fläche die Achse genau am Breakeven (statt einen Gitterpunkt daneben).
+function augmentZero(xs, ys) {
+  const ax = [], ay = [];
+  for (let i = 0; i < xs.length; i++) {
+    ax.push(xs[i]); ay.push(ys[i]);
+    if (i + 1 < xs.length && ((ys[i] < 0 && ys[i + 1] > 0) || (ys[i] > 0 && ys[i + 1] < 0))) {
+      ax.push(xs[i] - ys[i] * (xs[i + 1] - xs[i]) / (ys[i + 1] - ys[i]));
+      ay.push(0);
+    }
+  }
+  return [ax, ay];
+}
+
+// Dasselbe für die Zeitachse der realisierten Kurve: Nulldurchgang zwischen zwei
+// Handelstagen linear interpolieren (Lücken/fehlende Quotes bleiben Lücken).
+function augmentZeroTime(dates, ys) {
+  const ms = d => Date.parse(d + "T00:00:00Z");
+  const ax = [], ay = [];
+  for (let i = 0; i < dates.length; i++) {
+    ax.push(dates[i]); ay.push(ys[i]);
+    const a = ys[i], b = ys[i + 1];
+    if (a != null && b != null && ((a < 0 && b > 0) || (a > 0 && b < 0))) {
+      const t = ms(dates[i]) + (-a / (b - a)) * (ms(dates[i + 1]) - ms(dates[i]));
+      ax.push(new Date(t).toISOString().slice(0, 19).replace("T", " "));
+      ay.push(0);
+    }
+  }
+  return [ax, ay];
 }
 
 function breakevens(xs, ys) {
@@ -1369,34 +1490,251 @@ function breakevens(xs, ys) {
   return bes;
 }
 
+// Hex-Token (--ok/--err) als halbtransparentes rgba für Plotly-Flächen
+function hexA(hex, a) {
+  const h = hex.replace("#", "").trim();
+  const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h.slice(0, 6), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+// ---- Strategieerkennung (nur Benennung; beeinflusst keine Rechnung) ----
+function detectStrategy() {
+  if (!legs.length) return "";
+  const nStock = legs.filter(l => l.kind === "stock").reduce((a, l) => a + l.side * l.qty, 0);
+  const os = optLegs()
+    .map(l => ({ s: l.side * l.qty, cp: l.opt.call_put, k: l.opt.strike, e: l.opt.expiration }))
+    .sort((a, b) => a.e - b.e || a.k - b.k || (a.cp < b.cp ? -1 : 1));
+  const exps = [...new Set(os.map(o => o.e))];
+  if (!os.length) return nStock ? (nStock > 0 ? "Aktienposition (Long)" : "Aktienposition (Short)") : "";
+  if (nStock > 0) {
+    if (os.length === 1 && os[0].cp === "C" && os[0].s < 0) return "Covered Call";
+    if (os.length === 1 && os[0].cp === "P" && os[0].s > 0) return "Protective Put";
+    if (os.length === 2 && exps.length === 1) {
+      const c = os.find(o => o.cp === "C"), p = os.find(o => o.cp === "P");
+      if (c && p && c.s < 0 && p.s > 0) return "Collar";
+    }
+    return "Aktie + Optionen";
+  }
+  if (nStock !== 0) return "Aktie + Optionen";
+  if (os.length === 1)
+    return (os[0].s > 0 ? "Long " : "Short ") + (os[0].cp === "C" ? "Call" : "Put");
+  if (os.length === 2) {
+    const [a, b] = os;                       // sortiert: gleicher Verfall → nach Strike
+    if (exps.length === 1 && a.s === -b.s) {
+      // a = niedrigerer Strike. Long unten + Short oben ist beim Call der Debit-
+      // Spread (bullisch), beim Put der Credit-Spread (ebenfalls bullisch).
+      if (a.cp === b.cp && a.k !== b.k)
+        return a.cp === "C" ? (a.s > 0 ? "Bull Call Spread (Debit)" : "Bear Call Spread (Credit)")
+                            : (a.s > 0 ? "Bull Put Spread (Credit)" : "Bear Put Spread (Debit)");
+    }
+    if (exps.length === 1 && a.cp !== b.cp && Math.sign(a.s) === Math.sign(b.s))
+      return (a.s > 0 ? "Long " : "Short ") + (a.k === b.k ? "Straddle" : "Strangle");
+    if (exps.length === 2 && a.cp === b.cp && a.s === -b.s) {   // a = vorn, b = hinten
+      if (a.k === b.k) return b.s > 0 ? "Calendar Spread" : "Reverse Calendar Spread";
+      // PMCC = Diagonale, deren langes Leg als Aktienersatz dient: deutlich im Geld
+      if (b.s > 0 && b.k < a.k && a.cp === "C" && spot && b.k / 1000 <= spot.value * 0.93)
+        return "Poor Man's Covered Call (Diagonal)";
+      return "Diagonal Spread";
+    }
+  }
+  if (exps.length === 1 && os.length === 3 && os.every(o => o.cp === os[0].cp)) {
+    const [a, b, c] = os;
+    if (a.s > 0 && c.s > 0 && b.s === -(a.s + c.s)) return "Butterfly";
+    if (a.s < 0 && c.s < 0 && b.s === -(a.s + c.s)) return "Reverse Butterfly";
+  }
+  if (exps.length === 1 && os.length === 4) {
+    const cs = os.filter(o => o.cp === "C"), ps = os.filter(o => o.cp === "P");
+    if (cs.length === 2 && ps.length === 2) {
+      const [p1, p2] = ps, [c1, c2] = cs;    // je nach Strike aufsteigend
+      if (p1.s > 0 && p2.s < 0 && c1.s < 0 && c2.s > 0)
+        return p2.k === c1.k ? "Iron Butterfly" : "Iron Condor";
+      if (p1.s < 0 && p2.s > 0 && c1.s > 0 && c2.s < 0)
+        return p2.k === c1.k ? "Reverse Iron Butterfly" : "Reverse Iron Condor";
+    }
+    if (os.every(o => o.cp === os[0].cp)) {
+      const [a, b, c, d] = os;
+      if (a.s > 0 && b.s < 0 && c.s < 0 && d.s > 0) return "Condor";
+    }
+  }
+  if (exps.length === 2 && os.length === 4) {
+    const front = os.filter(o => o.e === exps[0]), back = os.filter(o => o.e === exps[1]);
+    if (front.length === 2 && back.length === 2 &&
+        front.every(o => o.s < 0) && back.every(o => o.s > 0))
+      return front[0].k === back[0].k && front[1].k === back[1].k
+        ? "Double Calendar" : "Double Diagonal";
+  }
+  return `Individuell · ${os.length} Legs · ${exps.length} Verfall${exps.length > 1 ? "stermine" : ""}`;
+}
+
+// ---- Strategievorlagen ----------------------------------------------------
+// m = Strike-Ziel als Vielfaches der „Breite“ relativ zum Spot (m = 0 → ATM,
+// m = +1 → Spot × (1 + Breite)). Gerundet wird auf den nächsten Strike der Kette,
+// der einen zweiseitigen Quote hat. e:"back" → hinterer Verfall (Zeitspreads).
+const TEMPLATES = [
+  { id: "lc",   g: "Einfach",  n: "Long Call",                  l: [{ s: 1, cp: "C", m: 0 }] },
+  { id: "lp",   g: "Einfach",  n: "Long Put",                   l: [{ s: 1, cp: "P", m: 0 }] },
+  { id: "sc",   g: "Einfach",  n: "Short Call (naked)",         l: [{ s: -1, cp: "C", m: 1 }] },
+  { id: "sp",   g: "Einfach",  n: "Short Put (cash-secured)",   l: [{ s: -1, cp: "P", m: -1 }] },
+  { id: "cc",   g: "Aktie + Option", n: "Covered Call",         l: [{ stock: 1 }, { s: -1, cp: "C", m: 1 }] },
+  { id: "pp",   g: "Aktie + Option", n: "Protective Put",       l: [{ stock: 1 }, { s: 1, cp: "P", m: -1 }] },
+  { id: "col",  g: "Aktie + Option", n: "Collar",               l: [{ stock: 1 }, { s: 1, cp: "P", m: -1 }, { s: -1, cp: "C", m: 1 }] },
+  { id: "bcs",  g: "Vertikal", n: "Bull Call Spread (Debit)",   l: [{ s: 1, cp: "C", m: 0 }, { s: -1, cp: "C", m: 1 }] },
+  { id: "bps",  g: "Vertikal", n: "Bull Put Spread (Credit)",   l: [{ s: -1, cp: "P", m: -1 }, { s: 1, cp: "P", m: -2 }] },
+  { id: "brps", g: "Vertikal", n: "Bear Put Spread (Debit)",    l: [{ s: 1, cp: "P", m: 0 }, { s: -1, cp: "P", m: -1 }] },
+  { id: "brcs", g: "Vertikal", n: "Bear Call Spread (Credit)",  l: [{ s: -1, cp: "C", m: 1 }, { s: 1, cp: "C", m: 2 }] },
+  { id: "lstr", g: "Volatilität", n: "Long Straddle",           l: [{ s: 1, cp: "C", m: 0 }, { s: 1, cp: "P", m: 0 }] },
+  { id: "sstr", g: "Volatilität", n: "Short Straddle",          l: [{ s: -1, cp: "C", m: 0 }, { s: -1, cp: "P", m: 0 }] },
+  { id: "lstg", g: "Volatilität", n: "Long Strangle",           l: [{ s: 1, cp: "C", m: 1 }, { s: 1, cp: "P", m: -1 }] },
+  { id: "sstg", g: "Volatilität", n: "Short Strangle",          l: [{ s: -1, cp: "C", m: 1 }, { s: -1, cp: "P", m: -1 }] },
+  { id: "ic",   g: "Neutral",  n: "Iron Condor",                l: [{ s: 1, cp: "P", m: -2 }, { s: -1, cp: "P", m: -1 }, { s: -1, cp: "C", m: 1 }, { s: 1, cp: "C", m: 2 }] },
+  { id: "ib",   g: "Neutral",  n: "Iron Butterfly",             l: [{ s: 1, cp: "P", m: -1 }, { s: -1, cp: "P", m: 0 }, { s: -1, cp: "C", m: 0 }, { s: 1, cp: "C", m: 1 }] },
+  { id: "bfly", g: "Neutral",  n: "Butterfly (Calls)",          l: [{ s: 1, cp: "C", m: -1 }, { s: -1, cp: "C", m: 0, q: 2 }, { s: 1, cp: "C", m: 1 }] },
+  { id: "cal",  g: "Zeit (2 Verfälle)", n: "Calendar Spread (Call)", l: [{ s: -1, cp: "C", m: 0 }, { s: 1, cp: "C", m: 0, e: "back" }] },
+  { id: "calp", g: "Zeit (2 Verfälle)", n: "Calendar Spread (Put)",  l: [{ s: -1, cp: "P", m: 0 }, { s: 1, cp: "P", m: 0, e: "back" }] },
+  { id: "dcal", g: "Zeit (2 Verfälle)", n: "Double Calendar",         l: [{ s: -1, cp: "P", m: -1 }, { s: 1, cp: "P", m: -1, e: "back" }, { s: -1, cp: "C", m: 1 }, { s: 1, cp: "C", m: 1, e: "back" }] },
+  { id: "diag", g: "Zeit (2 Verfälle)", n: "Diagonal Spread (Call)",  l: [{ s: -1, cp: "C", m: 1 }, { s: 1, cp: "C", m: 0, e: "back" }] },
+  { id: "pmcc", g: "Zeit (2 Verfälle)", n: "Poor Man's Covered Call", l: [{ s: 1, cp: "C", m: -3, e: "back" }, { s: -1, cp: "C", m: 1 }] },
+];
+const tplNeedsBack = t => t.l.some(d => d.e === "back");
+
+(() => {
+  let html = '', grp = null;
+  for (const t of TEMPLATES) {
+    if (t.g !== grp) { if (grp) html += "</optgroup>"; html += `<optgroup label="${t.g}">`; grp = t.g; }
+    html += `<option value="${t.id}">${t.n}</option>`;
+  }
+  $("g_tpl").innerHTML = html + "</optgroup>";
+})();
+
+$("g_tpl").onchange = () => {
+  const t = TEMPLATES.find(x => x.id === $("g_tpl").value);
+  $("g_tpl_e2wrap").classList.toggle("hidden", !t || !tplNeedsBack(t));
+};
+$("g_tpl").onchange();   // „2. Verfall“ nur bei Zeitspreads zeigen
+
+// Verfalls-Auswahl der Vorlagen: vorn der erste Verfall ab einer Woche Restlaufzeit,
+// hinten der erste mit mindestens dreifacher Restlaufzeit (sonst der letzte).
+function fillTemplateExps() {
+  const exps = [...new Set(rows.map(r => r.expiration))].sort((a, b) => a - b);
+  const html = exps.map(e => `<option value="${e}">${fmtDate(e)} · ${daysTo(e)} T</option>`).join("");
+  $("g_tpl_e1").innerHTML = html;
+  $("g_tpl_e2").innerHTML = html;
+  if (!exps.length) return;
+  const e1 = exps.find(e => daysTo(e) >= 7) ?? exps[0];
+  const d1 = Math.max(1, daysTo(e1));
+  $("g_tpl_e1").value = e1;
+  $("g_tpl_e2").value = exps.find(e => daysTo(e) >= 3 * d1) ?? exps[exps.length - 1];
+  $("g_tpl").onchange();
+}
+
+// Strike-Wahl einer Vorlage: nächster Strike zum Ziel, der (a) auf der richtigen
+// Seite des Spots liegt und (b) die bereits belegten Strikes desselben Verfalls
+// und Typs nicht überschreitet — sonst könnten bei grobem Strike-Raster die
+// Flügel eines Butterfly/Condor die Reihenfolge verdrehen.
+function pickTplLeg(d, exp, S, w, bounds) {
+  const key = `${exp}|${d.cp}`;
+  const b = bounds.get(key) || { min: Infinity, max: -Infinity };
+  const target = S * (1 + d.m * w) * 1000;
+  const base = rows.filter(r => r.expiration === exp && r.call_put === d.cp &&
+    r.best_bid > 0 && r.best_offer > 0 &&
+    (d.m > 0 ? r.strike > b.max : d.m < 0 ? r.strike < b.min : true));
+  const near = arr => arr.reduce((best, r) =>
+    !best || Math.abs(r.strike - target) < Math.abs(best.strike - target) ? r : best, null);
+  const side = d.m > 0 ? base.filter(r => r.strike >= S * 1000)
+             : d.m < 0 ? base.filter(r => r.strike <= S * 1000) : base;
+  const o = near(side) || near(base);
+  if (!o) return null;
+  bounds.set(key, { min: Math.min(b.min, o.strike), max: Math.max(b.max, o.strike) });
+  return o;
+}
+
+$("g_tpl_go").onclick = () => {
+  const t = TEMPLATES.find(x => x.id === $("g_tpl").value);
+  if (!t) return;
+  if (!spot) { hint("Ohne Underlying-Kurs lassen sich keine Strikes wählen — Vorlage nicht angewendet.", true); return; }
+  const e1 = +$("g_tpl_e1").value, e2 = +$("g_tpl_e2").value;
+  const back = tplNeedsBack(t);
+  if (!e1 || (back && !e2)) { hint("Verfall wählen.", true); return; }
+  if (back && e2 <= e1) { hint("Für diese Vorlage muss der 2. Verfall später liegen als der erste.", true); return; }
+  const w = Math.min(0.5, Math.max(0.005, (+$("g_tpl_w").value || 5) / 100));
+  const S = spot.value, bounds = new Map(), out = new Array(t.l.length).fill(null), missing = [];
+  // ATM-Legs zuerst wählen (kleinstes |m|), damit sie den Anker für die Flügel setzen
+  const order = t.l.map((d, i) => i).sort((a, b) => Math.abs(t.l[a].m ?? 0) - Math.abs(t.l[b].m ?? 0));
+  for (const i of order) {
+    const d = t.l[i];
+    if (d.stock) { out[i] = makeStockLeg(d.stock, d.q || 1); continue; }
+    const exp = d.e === "back" ? e2 : e1;
+    const o = pickTplLeg(d, exp, S, w, bounds);
+    if (!o) { missing.push(`${d.cp === "C" ? "Call" : "Put"} ≈ ${fmtNum(S * (1 + d.m * w), 2)} (${fmtDate(exp)})`); continue; }
+    out[i] = makeOptLeg(d.s, d.q || 1, o);
+  }
+  const built = out.filter(Boolean);
+  if (!built.filter(l => l.kind !== "stock").length) {
+    hint(`Vorlage „${t.n}“ nicht anwendbar — in dieser Kette gibt es keine passenden Optionen mit zweiseitigem Quote.`, true);
+    return;
+  }
+  legs = built;
+  $("g_eval").value = "";   // Bewertungstag neu bestimmen (= frühester Verfall)
+  if ($("mc_vsrc").value === "iv") {
+    const v = mcSigmaFromLegs();
+    if (v) $("mc_vol").value = (v * 100).toFixed(1);
+  }
+  drawLegs();
+  drawPayoff();
+  invalidateRealized();
+  hint(missing.length
+    ? `Vorlage „${t.n}“ nur teilweise angewendet — kein handelbarer Quote für: ${missing.join(", ")}.`
+    : `Vorlage „${t.n}“ angewendet · Breite ${(w * 100).toFixed(1)} % · Strikes auf die Kette gerundet.`,
+    missing.length > 0);
+};
+
+// ---- Legs manuell aufbauen ----
 function renderStrategy() {
   $("rowcount").textContent = "";
   const opt = populateStrikes();
-  $("g_add").disabled = !opt;
-  $("g_hint").textContent = opt ? "" : "Verfall und Typ (Call/Put) wählen, dann Strike und „Leg hinzufügen“.";
+  const isStock = $("g_kind").value === "stock";
+  $("g_add").disabled = isStock ? !spot : !opt;
+  hint(isStock
+    ? (spot ? "" : "Kein Underlying-Kurs verfügbar — Aktien-Leg nicht möglich.")
+    : (opt ? "" : "Verfall und Typ (Call/Put) wählen, dann Strike und „Leg hinzufügen“."),
+    isStock && !spot);
   drawLegs();
   drawPayoff();
   drawLegBreakdown();
   drawRealized();
 }
 
+$("g_kind").onchange = renderStrategy;
+$("g_clear").onclick = () => {
+  legs = [];
+  hint("");
+  drawLegs();
+  drawPayoff();
+  invalidateRealized();
+};
+
 $("g_add").onclick = () => {
-  const opt = populateStrikes();
-  if (!opt) return;
-  if (legs.length && legs[0].opt.expiration !== opt.expiration) {
-    $("g_hint").textContent = "Alle Legs müssen denselben Verfall haben — Leg nicht hinzugefügt.";
-    return;
-  }
   const side = +$("g_side").value;
   const qty = Math.max(1, Math.floor(+$("g_qty").value || 1));
-  const prem = side > 0 ? opt.best_offer : opt.best_bid;   // Kauf zum Ask, Verkauf zum Bid
-  if (prem == null || !(prem >= 0)) {
-    $("g_hint").textContent = "Für diese Option fehlt der Bid/Ask-Quote — Leg nicht hinzugefügt.";
-    return;
+  if ($("g_kind").value === "stock") {
+    if (!spot) { hint("Kein Underlying-Kurs verfügbar — Aktien-Leg nicht möglich.", true); return; }
+    const same = legs.find(l => l.kind === "stock" && l.side === side);
+    if (same) same.qty += qty; else legs.push(makeStockLeg(side, qty));
+    hint(spot.source === "crsp" ? ""
+      : "Einstiegskurs der Aktie ist der aus Delta geschätzte Spot (≈) — keine CRSP-Notierung.",
+      spot.source !== "crsp");
+  } else {
+    const opt = populateStrikes();
+    if (!opt) return;
+    const prem = side > 0 ? opt.best_offer : opt.best_bid;   // Kauf zum Ask, Verkauf zum Bid
+    if (prem == null || !(prem >= 0)) {
+      hint("Für diese Option fehlt der Bid/Ask-Quote — Leg nicht hinzugefügt.", true);
+      return;
+    }
+    const same = legs.find(l => l.kind !== "stock" && l.opt.option_id === opt.option_id && l.side === side);
+    if (same) same.qty += qty; else legs.push(makeOptLeg(side, qty, opt));
+    hint("");
   }
-  const same = legs.find(l => l.opt.option_id === opt.option_id && l.side === side);
-  if (same) same.qty += qty; else legs.push({ side, qty, prem, opt });
-  $("g_hint").textContent = "";
   if ($("mc_vsrc").value === "iv") {
     const v = mcSigmaFromLegs();
     if (v) $("mc_vol").value = (v * 100).toFixed(1);
@@ -1408,86 +1746,123 @@ $("g_add").onclick = () => {
 
 function drawLegs() {
   const tb = $("g_legs").querySelector("tbody");
+  const gv = (l, k) => l.opt[k] == null || isSent(l.opt[k]) ? "—" : fmtNum(l.opt[k], 4);
   tb.innerHTML = legs.map((l, i) => `<tr>
     <td>${l.side > 0 ? "Kauf" : "Verkauf"}</td>
-    <td>${l.opt.call_put === "C" ? "Call" : "Put"}</td>
-    <td>${fmtNum(l.opt.strike / 1000, 3)}</td>
-    <td>${fmtDate(l.opt.expiration)}</td>
+    <td>${l.kind === "stock" ? "Aktie (100 Stk.)" : (l.opt.call_put === "C" ? "Call" : "Put")}</td>
+    <td>${l.kind === "stock" ? "—" : fmtNum(l.opt.strike / 1000, 3)}</td>
+    <td>${l.kind === "stock" ? "—" : fmtDate(l.opt.expiration)}</td>
     <td>${l.qty}</td>
     <td>${fmtNum(l.prem, 4)}</td>
-    <td>${fmtNum(l.opt.implied_vol, 4)}</td>
-    <td>${fmtNum(l.opt.delta, 4)}</td>
-    <td><button type="button" class="ghost" data-leg="${i}" title="Leg entfernen">&#10005;</button></td>
+    <td>${l.kind === "stock" ? "—" : gv(l, "implied_vol")}</td>
+    <td>${l.kind === "stock" ? "1,0000" : gv(l, "delta")}</td>
+    <td style="white-space:nowrap">
+      <button type="button" class="ghost iconbtn" data-leg="${i}" data-act="dec" title="Menge &minus;1">&minus;</button>
+      <button type="button" class="ghost iconbtn" data-leg="${i}" data-act="inc" title="Leg duplizieren (Menge +1)">+</button>
+      <button type="button" class="ghost iconbtn" data-leg="${i}" data-act="del" title="Leg entfernen">&#10005;</button>
+    </td>
   </tr>`).join("");
-  for (const b of tb.querySelectorAll("button"))
-    b.onclick = () => { legs.splice(+b.dataset.leg, 1); drawLegs(); drawPayoff(); invalidateRealized(); };
+  for (const b of tb.querySelectorAll("button[data-leg]")) b.onclick = () => {
+    const i = +b.dataset.leg;
+    if (b.dataset.act === "del") legs.splice(i, 1);
+    else if (b.dataset.act === "inc") legs[i].qty += 1;
+    else if (legs[i].qty > 1) legs[i].qty -= 1;
+    drawLegs(); drawPayoff(); invalidateRealized();
+  };
 }
 
 async function drawPayoff() {
   const el = $("payoffchart");
   if (view !== "strategy") return;
+  fillEvalPicker();
+  $("g_name").textContent = detectStrategy();
   if (!legs.length) {
     $("g_stats").innerHTML = "";
     clearPlot(el, '<div style="padding:1rem;color:var(--muted)">Noch keine Legs in der Position.</div>');
     return;
   }
-  const xs = payoffGrid(), ys = xs.map(pnlAt);
+  const ed = evalDate();
+  const model = buildModel(ed);
+  const nModel = model.filter(m => m.T > 0).length;                    // Legs mit Restlaufzeit
+  const nNoSig = model.filter(m => m.T > 0 && !(m.sig > 0)).length;    // davon ohne IV
+  const grid = payoffGrid();
+  const [xs, ys] = augmentZero(grid, grid.map(S => pnlModel(model, S)));
   const bes = breakevens(xs, ys);
-  const cost = legs.reduce((a, l) => a + l.side * l.qty * l.prem * CS(l.opt), 0);
-  // Steigung rechts von allen Strikes (nur Calls zählen): ≠ 0 → unbegrenzt
-  const slopeR = legs.filter(l => l.opt.call_put === "C")
-    .reduce((a, l) => a + l.side * l.qty * CS(l.opt), 0);
-  const yAll = ys.concat(pnlAt(0));
+  const cost = legs.reduce((a, l) => a + l.side * l.qty * l.prem * CS(l), 0);
+  // Asymptotische Steigung rechts (Calls + Aktien-Legs): ≠ 0 → unbegrenzt
+  const slopeR = legs.reduce((a, l) =>
+    a + ((l.kind === "stock" || l.opt.call_put === "C") ? l.side * l.qty * CS(l) : 0), 0);
+  const yAll = ys.concat(pnlModel(model, 1e-6));
   const maxP = slopeR > 0 ? Infinity : Math.max(...yAll);
   const maxL = slopeR < 0 ? -Infinity : Math.min(...yAll);
   const g = { delta: 0, gamma: 0, vega: 0, theta: 0 };
-  for (const l of legs) for (const k in g)   // Netto-Greeks pro Option (nicht ×Kontraktgröße)
-    if (l.opt[k] != null && !isSent(l.opt[k])) g[k] += l.side * l.qty * l.opt[k];
-  const estG = legs.some(l => l.opt._estMode === "bs");   // geschätzte Legs im Spiel
-  const gMissing = legs.some(l => ["delta", "gamma", "vega", "theta"].some(k => l.opt[k] == null || isSent(l.opt[k])));
+  for (const l of legs) {                    // Netto-Greeks pro Option (nicht ×Kontraktgröße);
+    if (l.kind === "stock") { g.delta += l.side * l.qty; continue; }   // 100 Aktien = Delta 1
+    for (const k in g) if (l.opt[k] != null && !isSent(l.opt[k])) g[k] += l.side * l.qty * l.opt[k];
+  }
+  const estG = optLegs().some(l => l.opt._estMode === "bs");   // geschätzte Legs im Spiel
+  const gMissing = optLegs().some(l => ["delta", "gamma", "vega", "theta"].some(k => l.opt[k] == null || isSent(l.opt[k])));
   const gp = estG ? "≈ " : "", gst = (estG || gMissing) ? "warn" : "";
   const gtile = (lbl, val, dec) => tile(lbl, gMissing ? "—" : gp + fmtNum(val, dec), "", gst);
-  const money = v => v === Infinity || v === -Infinity ? "unbegrenzt" : fmtNum(v, 2);
+  const mp = nModel ? "≈ " : "";             // Modellwert statt reiner Auszahlung → markieren
+  const money = v => v === Infinity || v === -Infinity ? "unbegrenzt" : mp + fmtNum(v, 2);
+  const notes = [];
+  if (nModel) notes.push(`Bewertung zum ${fmtDate(ed)}: ${nModel} Leg(s) laufen dann noch — deren Wert ist ` +
+    `ein Black-Scholes-Modellwert (r = q = 0, IV vom Einstieg), keine Marktbeobachtung.`);
+  if (nNoSig) notes.push(`${nNoSig} davon ohne verwertbare IV — dort steht nur der innere Wert.`);
   $("g_stats").innerHTML =
     `<div class="tiles">` +
       tile(cost >= 0 ? "Einsatz (Debit)" : "Prämieneinnahme (Credit)", fmtNum(Math.abs(cost), 2), "", "accent") +
       tile("Max. Gewinn", money(maxP), "", "pos") +
       tile("Max. Verlust", money(maxL), "", "neg") +
-      tile("Breakeven", bes.length ? bes.map(b => fmtNum(b, 2)).join(" / ") : "—") +
+      tile("Breakeven", bes.length ? mp + bes.map(b => fmtNum(b, 2)).join(" / ") : "—") +
     `</div>` +
     `<div class="tiles greeks">` +
       gtile("Delta", g.delta, 3) +
       gtile("Gamma", g.gamma, 4) +
       gtile("Vega", g.vega, 3) +
       gtile("Theta", g.theta, 3) +
-    `</div>`;
+    `</div>` +
+    (notes.length ? `<div class="note-warn">${notes.join(" ")}</div>` : "");
 
   let Plotly;
   try { Plotly = await loadPlotly(); }
   catch (e) { clearPlot(el, `<div style="padding:1rem;color:var(--err)">${e.message}</div>`); return; }
   const css = getComputedStyle(document.documentElement);
   const C = v => css.getPropertyValue(v).trim();
+  const okC = C("--ok"), errC = C("--err");
   const shapes = [{ type: "line", x0: xs[0], x1: xs[xs.length - 1], y0: 0, y1: 0,
                     line: { color: C("--border"), width: 1 } }];
   const annotations = [];
   if (spot) {
     const est = spot.source !== "crsp";   // Delta-Schätzung sichtbar machen
     shapes.push({ type: "line", x0: spot.value, x1: spot.value, yref: "paper", y0: 0, y1: 1,
-      line: { color: est ? C("--warn") : C("--ok"), width: 1.5, dash: est ? "dot" : "dash" } });
+      line: { color: est ? C("--warn") : C("--muted"), width: 1.5, dash: est ? "dot" : "dash" } });
     annotations.push({ x: spot.value, yref: "paper", y: 1, yanchor: "top", showarrow: false,
       text: est ? `Spot ≈ ${fmtNum(spot.value, 2)} (geschätzt)` : `Spot ${fmtNum(spot.value, 2)} (CRSP)`,
-      font: { color: est ? C("--warn") : C("--ok"), size: 11 } });
+      font: { color: est ? C("--warn") : C("--secondary"), size: 11 } });
   }
-  await Plotly.react(readyPlot(el), [{
-    type: "scatter", mode: "lines", x: xs, y: ys,
-    line: { color: C("--accent"), width: 2 },
-    hovertemplate: "Kurs %{x:,.2f}<br>P&L %{y:,.2f}<extra></extra>",
-  }], {
+  if (nModel) annotations.push({ xref: "paper", yref: "paper", x: 0, y: 1, xanchor: "left", yanchor: "top",
+    showarrow: false, text: "≈ Modellwert (Black-Scholes)", font: { color: C("--warn"), size: 11 } });
+  // Gewinn grün, Verlust rot: je eine geclippte Fläche und eine geclippte Linie.
+  // Beide teilen sich die Breakeven-Stützpunkte, daher gehen sie nahtlos ineinander über.
+  const hov = "Kurs %{x:,.2f}<br>P&L %{y:,.2f}<extra></extra>";
+  const traces = [
+    { type: "scatter", mode: "lines", x: xs, y: ys.map(v => Math.max(v, 0)), fill: "tozeroy",
+      fillcolor: hexA(okC, 0.15), line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+    { type: "scatter", mode: "lines", x: xs, y: ys.map(v => Math.min(v, 0)), fill: "tozeroy",
+      fillcolor: hexA(errC, 0.15), line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+    { type: "scatter", mode: "lines", x: xs, y: ys.map(v => v >= 0 ? v : null),
+      line: { color: okC, width: 2.5 }, connectgaps: false, showlegend: false, hovertemplate: hov },
+    { type: "scatter", mode: "lines", x: xs, y: ys.map(v => v <= 0 ? v : null),
+      line: { color: errC, width: 2.5 }, connectgaps: false, showlegend: false, hovertemplate: hov },
+  ];
+  await Plotly.react(readyPlot(el), traces, {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
     font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
     margin: { l: 65, r: 15, t: 25, b: 45 },
     shapes, annotations,
-    xaxis: { title: { text: "Underlying-Kurs am Verfall" }, gridcolor: C("--border"), zeroline: false },
+    xaxis: { title: { text: `Underlying-Kurs am ${fmtDate(ed)}` }, gridcolor: C("--border"), zeroline: false },
     yaxis: { title: { text: "Gewinn/Verlust" }, gridcolor: C("--border"), zeroline: false },
   }, { responsive: true, displaylogo: false });
 }
@@ -1495,16 +1870,21 @@ async function drawPayoff() {
 // ---- Realisiertes Ergebnis: echte historische Quotes statt Payoff-Formel ----
 // Glattstellen spiegelt den Einstieg (Kauf@Ask/Verkauf@Bid): eine Long-Position
 // wird verkauft (Bid), eine Short-Position zurückgekauft (Ask).
-function exitPriceFor(leg, row) {
+// Aktien-Legs werden mit dem CRSP-Schlusskurs des Tages glattgestellt (px).
+function exitPriceFor(leg, row, px) {
+  if (leg.kind === "stock") return (px != null && px > 0) ? px : null;
   if (!row) return null;
   const v = leg.side > 0 ? row.best_bid : row.best_offer;
   return (v == null || !(v >= 0)) ? null : v;
 }
 
+// Bis zum FRÜHESTEN Verfall der Position: danach fehlen dem vorderen Leg die
+// Quotes, die Position ist also nicht mehr als Ganzes bewertbar.
 function realizedDateRange() {
   if (!legs.length) return [];
-  const exp = legs[0].opt.expiration;
-  return manifest.dates.filter(d => d >= queryDate && d <= exp);
+  const es = legExps();
+  const end = es.length ? es[0] : manifest.dates[manifest.dates.length - 1];
+  return manifest.dates.filter(d => d >= queryDate && d <= end);
 }
 
 function populateRealizedPicker() {
@@ -1551,41 +1931,43 @@ async function onRealizedDateChange() {
   try {
     await duckdbReady;
     const secid = Number($("secid").value);
-    const ids = [...new Set(legs.map(l => l.opt.option_id))];
+    const ids = [...new Set(optLegs().map(l => l.opt.option_id))];
     const url = dataUrl(`opt/${Number(secid) % 100}/${secid}.parquet`);
-    const res = await conn.query(`
-      SELECT option_id, best_bid, best_offer FROM read_parquet('${url}')
-      WHERE date = ${d} AND option_id IN (${ids.join(",")})
-    `);
     const byId = new Map();
-    for (const r of res.toArray()) {
-      const o = r.toJSON();
-      for (const k in o) if (typeof o[k] === "bigint") o[k] = Number(o[k]);
-      byId.set(o.option_id, o);
+    if (ids.length) {
+      const res = await conn.query(`
+        SELECT option_id, best_bid, best_offer FROM read_parquet('${url}')
+        WHERE date = ${d} AND option_id IN (${ids.join(",")})
+      `);
+      for (const r of res.toArray()) {
+        const o = r.toJSON();
+        for (const k in o) if (typeof o[k] === "bigint") o[k] = Number(o[k]);
+        byId.set(o.option_id, o);
+      }
     }
-    let pnl = 0, complete = true;
-    const perLeg = legs.map(l => {
-      const ex = exitPriceFor(l, byId.get(l.opt.option_id));
-      if (ex == null) complete = false; else pnl += l.side * l.qty * (ex - l.prem) * CS(l.opt);
-      return { leg: l, exit: ex };
-    });
-    realizedPoint = { date: d, pnl, complete, perLeg };
-
-    // Zum Vergleich: hypothetischer Wert bei sofortigem Verfall zum Kurs dieses
-    // Tages (nur innerer Wert) — zeigt den Unterschied durch die Restlaufzeit.
-    let compareTile = "";
+    // CRSP-Kurs des Tages: Glattstellung von Aktien-Legs + Vergleichskennzahl
+    let px = null;
     const pn = permnoFor($("secid").value.trim(), d);
     if (pn != null) {
       const sr = await conn.query(`
         SELECT prc FROM read_parquet('${dataUrl("crsp_daily.parquet")}')
         WHERE permno = ${pn} AND date = ${d}`);
       const a = sr.toArray();
-      if (a.length && a[0].prc != null) {
-        const s = Number(a[0].prc);
-        compareTile = tile(`Bei sofortigem Verfall @ ${fmtNum(s, 2)} (innerer Wert)`,
-          fmtNum(pnlAt(s), 2), "", signState(pnlAt(s)));
-      }
+      if (a.length && a[0].prc != null) px = Number(a[0].prc);
     }
+    let pnl = 0, complete = true;
+    const perLeg = legs.map(l => {
+      const ex = exitPriceFor(l, l.kind === "stock" ? null : byId.get(l.opt.option_id), px);
+      if (ex == null) complete = false; else pnl += l.side * l.qty * (ex - l.prem) * CS(l);
+      return { leg: l, exit: ex };
+    });
+    realizedPoint = { date: d, pnl, complete, perLeg };
+
+    // Zum Vergleich: hypothetischer Wert bei sofortigem Verfall zum Kurs dieses
+    // Tages (nur innerer Wert) — zeigt den Unterschied durch die Restlaufzeit.
+    const compareTile = px == null ? "" :
+      tile(`Bei sofortigem Verfall @ ${fmtNum(px, 2)} (innerer Wert)`,
+        fmtNum(pnlAt(px, null), 2), "", signState(pnlAt(px, null)));
     const nMiss = perLeg.filter(p => p.exit == null).length;
     $("r_out").innerHTML =
       `<div class="hero"><span class="k">Realisiert am ${fmtDate(d)}</span>` +
@@ -1605,12 +1987,13 @@ async function onRealizedDateChange() {
 function drawLegBreakdown() {
   const tb = $("r_legs").querySelector("tbody");
   tb.innerHTML = !realizedPoint ? "" : realizedPoint.perLeg.map(({ leg: l, exit: ex }) => `<tr>
-    <td>${l.side > 0 ? "Kauf" : "Verkauf"}</td>
-    <td>${l.opt.call_put === "C" ? "Call" : "Put"}</td>
-    <td>${fmtNum(l.opt.strike / 1000, 3)}</td>
+    <td>${l.side > 0 ? "Kauf" : "Verkauf"}${l.qty > 1 ? " ×" + l.qty : ""}</td>
+    <td>${l.kind === "stock" ? "Aktie (100 Stk.)" : (l.opt.call_put === "C" ? "Call" : "Put")}</td>
+    <td>${l.kind === "stock" ? "—" : fmtNum(l.opt.strike / 1000, 3)}</td>
+    <td>${l.kind === "stock" ? "—" : fmtDate(l.opt.expiration)}</td>
     <td>${fmtNum(l.prem, 4)}</td>
-    <td>${ex == null ? "kein Quote" : fmtNum(ex, 4)}</td>
-    <td>${ex == null ? "—" : fmtNum(l.side * l.qty * (ex - l.prem) * CS(l.opt), 2)}</td>
+    <td>${ex == null ? (l.kind === "stock" ? "kein CRSP-Kurs" : "kein Quote") : fmtNum(ex, 4)}</td>
+    <td>${ex == null ? "—" : fmtNum(l.side * l.qty * (ex - l.prem) * CS(l), 2)}</td>
   </tr>`).join("");
 }
 
@@ -1625,32 +2008,47 @@ $("r_curve").onclick = async () => {
   $("r_curve").disabled = true;
   $("r_stop").classList.remove("hidden");
   const secid = Number($("secid").value);
-  const ids = [...new Set(legs.map(l => l.opt.option_id))];
+  const ids = [...new Set(optLegs().map(l => l.opt.option_id))];
   const values = new Array(ds.length).fill(null);
   const t0 = performance.now();
   try {
     await duckdbReady;
     // SecID-Layout: eine Abfrage ueber den ganzen Zeitraum (option_id IN (...)),
     // statt in 10-Tage-Batches ueber viele Tagesdateien.
-    const res = await conn.query(`
-      SELECT date, option_id, best_bid, best_offer
-      FROM read_parquet('${dataUrl(`opt/${Number(secid) % 100}/${secid}.parquet`)}')
-      WHERE option_id IN (${ids.join(",")}) AND date BETWEEN ${ds[0]} AND ${ds[ds.length - 1]}
-      ORDER BY date`);
     const byDate = new Map();
-    for (const r of res.toArray()) {
-      const o = r.toJSON();
-      for (const k in o) if (typeof o[k] === "bigint") o[k] = Number(o[k]);
-      if (!byDate.has(o.date)) byDate.set(o.date, new Map());
-      byDate.get(o.date).set(o.option_id, o);
+    if (ids.length) {
+      const res = await conn.query(`
+        SELECT date, option_id, best_bid, best_offer
+        FROM read_parquet('${dataUrl(`opt/${Number(secid) % 100}/${secid}.parquet`)}')
+        WHERE option_id IN (${ids.join(",")}) AND date BETWEEN ${ds[0]} AND ${ds[ds.length - 1]}
+        ORDER BY date`);
+      for (const r of res.toArray()) {
+        const o = r.toJSON();
+        for (const k in o) if (typeof o[k] === "bigint") o[k] = Number(o[k]);
+        if (!byDate.has(o.date)) byDate.set(o.date, new Map());
+        byDate.get(o.date).set(o.option_id, o);
+      }
+    }
+    // Aktien-Legs: CRSP-Schlusskurse über denselben Zeitraum (eine Abfrage)
+    const pxByDate = new Map();
+    if (legs.some(l => l.kind === "stock")) {
+      const pn = permnoFor($("secid").value.trim(), queryDate);
+      if (pn != null) {
+        const pr = await conn.query(`
+          SELECT date, prc FROM read_parquet('${dataUrl("crsp_daily.parquet")}')
+          WHERE permno = ${pn} AND date BETWEEN ${ds[0]} AND ${ds[ds.length - 1]}`);
+        for (const r of pr.toArray())
+          if (r.prc != null) pxByDate.set(Number(r.date), Number(r.prc));
+      }
     }
     for (let j = 0; j < ds.length; j++) {
       const rowsForDay = byDate.get(ds[j]);
       let pnl = 0, complete = true;
       for (const l of legs) {
-        const ex = exitPriceFor(l, rowsForDay?.get(l.opt.option_id));
+        const ex = exitPriceFor(l, l.kind === "stock" ? null : rowsForDay?.get(l.opt.option_id),
+                                pxByDate.get(ds[j]));
         if (ex == null) { complete = false; break; }
-        pnl += l.side * l.qty * (ex - l.prem) * CS(l.opt);
+        pnl += l.side * l.qty * (ex - l.prem) * CS(l);
       }
       values[j] = complete ? pnl : null;
     }
@@ -1682,17 +2080,31 @@ async function drawRealized() {
   catch (e) { clearPlot(el, `<div style="padding:1rem;color:var(--err)">${e.message}</div>`); return; }
   const css = getComputedStyle(document.documentElement);
   const C = v => css.getPropertyValue(v).trim();
+  const okC = C("--ok"), errC = C("--err");
   const traces = [];
-  if (realizedCurve) traces.push({
-    type: "scatter", mode: "lines", name: "realisiertes P&L",
-    x: realizedCurve.dates.map(fmtDate), y: realizedCurve.values,
-    connectgaps: false, line: { color: C("--accent"), width: 2 },
-    hovertemplate: "%{x}<br>P&L %{y:,.2f}<extra></extra>",
-  });
+  if (realizedCurve) {
+    // Gewinn-/Verlustzonen wie im Payoff-Diagramm einfärben; der Nulldurchgang
+    // wird auf der Zeitachse interpoliert, damit Grün und Rot ohne Lücke aneinander stoßen
+    const [dx, dy] = augmentZeroTime(realizedCurve.dates.map(fmtDate), realizedCurve.values);
+    const clip = f => dy.map(v => v == null ? null : f(v));
+    const hov = "%{x}<br>P&L %{y:,.2f}<extra></extra>";
+    traces.push(
+      { type: "scatter", mode: "lines", x: dx, y: clip(v => Math.max(v, 0)), fill: "tozeroy",
+        fillcolor: hexA(okC, 0.15), line: { width: 0 }, connectgaps: false, hoverinfo: "skip" },
+      { type: "scatter", mode: "lines", x: dx, y: clip(v => Math.min(v, 0)), fill: "tozeroy",
+        fillcolor: hexA(errC, 0.15), line: { width: 0 }, connectgaps: false, hoverinfo: "skip" },
+      { type: "scatter", mode: "lines", name: "realisiertes P&L", x: dx,
+        y: clip(v => v >= 0 ? v : null), connectgaps: false,
+        line: { color: okC, width: 2 }, hovertemplate: hov },
+      { type: "scatter", mode: "lines", name: "realisiertes P&L", x: dx,
+        y: clip(v => v <= 0 ? v : null), connectgaps: false,
+        line: { color: errC, width: 2 }, hovertemplate: hov });
+  }
   if (realizedPoint) traces.push({
     type: "scatter", mode: "markers", name: "gewählter Tag",
     x: [fmtDate(realizedPoint.date)], y: [realizedPoint.pnl],
-    marker: { size: 10, color: realizedPoint.complete ? C("--ok") : C("--warn") },
+    marker: { size: 10, color: realizedPoint.complete ? C("--accent") : C("--warn"),
+              line: { color: C("--bg"), width: 2 } },
     hovertemplate: "%{x}<br>P&L %{y:,.2f}<extra></extra>",
   });
   if (!traces.length) {
@@ -1713,9 +2125,9 @@ async function drawRealized() {
 
 // ---- Monte-Carlo: GBM bis zum Verfall, P&L-Verteilung der Position ----
 function mcSigmaFromLegs() {
-  const vs = legs.filter(l => l.opt.implied_vol > 0);
+  const vs = optLegs().filter(l => l.sigma != null);
   if (!vs.length) return null;
-  return vs.reduce((a, l) => a + l.opt.implied_vol * l.qty, 0) /
+  return vs.reduce((a, l) => a + l.sigma * l.qty, 0) /
          vs.reduce((a, l) => a + l.qty, 0);
 }
 
@@ -1760,7 +2172,13 @@ $("mc_run").onclick = async () => {
   if (!(sigma > 0)) { $("mc_out").textContent = "Volatilität > 0 angeben."; return; }
   const mu = (+$("mc_drift").value || 0) / 100;
   const n = Math.min(200000, Math.max(1000, Math.floor(+$("mc_n").value || 20000)));
-  const T = Math.max(1, (toDate(legs[0].opt.expiration) - toDate(queryDate)) / 86400000) / 365;
+  // Horizont = Bewertungstag der Strategie-Karte (Standard: frühester Verfall).
+  // Legs mit Restlaufzeit werden dort per Black-Scholes bewertet — dieselbe
+  // Modellannahme wie im Payoff-Diagramm (konstante IV, kein Smile).
+  const ed = evalDate();
+  const T = Math.max(1, (toDate(ed) - toDate(queryDate)) / 86400000) / 365;
+  const model = buildModel(ed);
+  const nModel = model.filter(m => m.T > 0).length;
   const S0 = spot.value;
   const drift = (mu - sigma * sigma / 2) * T, volT = sigma * Math.sqrt(T);
 
@@ -1768,9 +2186,9 @@ $("mc_run").onclick = async () => {
   for (let i = 0; i < n; i += 2) {   // Box-Muller: zwei Normalziehungen je Runde
     const u1 = Math.random() || 1e-12, u2 = Math.random();
     const r0 = Math.sqrt(-2 * Math.log(u1));
-    pnls[i] = pnlAt(S0 * Math.exp(drift + volT * r0 * Math.cos(2 * Math.PI * u2)));
+    pnls[i] = pnlModel(model, S0 * Math.exp(drift + volT * r0 * Math.cos(2 * Math.PI * u2)));
     if (i + 1 < n)
-      pnls[i + 1] = pnlAt(S0 * Math.exp(drift + volT * r0 * Math.sin(2 * Math.PI * u2)));
+      pnls[i + 1] = pnlModel(model, S0 * Math.exp(drift + volT * r0 * Math.sin(2 * Math.PI * u2)));
   }
   const sorted = Float64Array.from(pnls).sort();
   const q = p => sorted[Math.min(n - 1, Math.floor(p * n))];
@@ -1784,7 +2202,10 @@ $("mc_run").onclick = async () => {
       tile("5 % / 95 %-Quantil", `${fmtNum(q(0.05), 2)} / ${fmtNum(q(0.95), 2)}`) +
     `</div>` +
     (spot.source === "crsp" ? "" :
-      `<div class="note-warn" style="margin-top:0.5rem">Startkurs aus Delta geschätzt.</div>`);
+      `<div class="note-warn" style="margin-top:0.5rem">Startkurs aus Delta geschätzt.</div>`) +
+    (nModel ? `<div class="note-warn" style="margin-top:0.5rem">Bewertet zum ${fmtDate(ed)}: ` +
+      `${nModel} Leg(s) laufen dann noch — deren Wert ist ein Black-Scholes-Modellwert ` +
+      `(konstante IV vom Einstieg, kein Smile).</div>` : "");
 
   $("mcchart").classList.remove("hidden");
   let Plotly;
@@ -1792,20 +2213,28 @@ $("mc_run").onclick = async () => {
   catch (e) { clearPlot($("mcchart"), `<div style="padding:1rem;color:var(--err)">${e.message}</div>`); return; }
   const css = getComputedStyle(document.documentElement);
   const C = v => css.getPropertyValue(v).trim();
+  // Selbst gebinnt statt Plotly-Histogramm: nur so lässt sich jeder Balken nach
+  // Vorzeichen einfärben (Verlust rot, Gewinn grün) wie im Payoff-Diagramm.
+  const nb = 80, lo = sorted[0], hi = sorted[n - 1];
+  const bw = (hi - lo) / nb || 1;
+  const cnt = new Array(nb).fill(0);
+  for (const v of pnls) cnt[Math.min(nb - 1, Math.max(0, Math.floor((v - lo) / bw)))]++;
+  const bx = cnt.map((_, i) => lo + (i + 0.5) * bw);
   await Plotly.react(readyPlot($("mcchart")), [{
-    type: "histogram", x: Array.from(pnls), nbinsx: 80,
-    marker: { color: C("--accent") },
-    hovertemplate: "P&L %{x}<br>%{y} Pfade<extra></extra>",
+    type: "bar", x: bx, y: cnt, width: bw,
+    marker: { color: bx.map(x => x >= 0 ? C("--ok") : C("--err")) },
+    hovertemplate: "P&L %{x:,.2f}<br>%{y} Pfade<extra></extra>",
   }], {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
     font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
     margin: { l: 60, r: 15, t: 40, b: 45 },
+    bargap: 0, showlegend: false,
     title: { text: `${n.toLocaleString("de-DE")} Pfade · σ ${(sigma * 100).toFixed(1)} % · µ ${(mu * 100).toFixed(1)} %` +
       ` · ${Math.round(T * 365)} Tage · S₀ ${fmtNum(S0, 2)} ${spot.source === "crsp" ? "(CRSP)" : "(≈ geschätzt)"}`,
       font: { size: 12 } },
     shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1,
-               line: { color: C("--err"), width: 1.5, dash: "dash" } }],
-    xaxis: { title: { text: "P&L am Verfall" }, gridcolor: C("--border"), zeroline: false },
+               line: { color: C("--fg"), width: 1.5, dash: "dash" } }],
+    xaxis: { title: { text: `P&L am ${fmtDate(ed)}` }, gridcolor: C("--border"), zeroline: false },
     yaxis: { title: { text: "Anzahl Pfade" }, gridcolor: C("--border") },
   }, { responsive: true, displaylogo: false });
 };
