@@ -374,8 +374,8 @@
         <label id="g_tpl_e2wrap" title="Nur f&uuml;r Zeitspreads: der hintere (sp&auml;tere) Verfall">2.&nbsp;Verfall
           <select id="g_tpl_e2"></select>
         </label>
-        <label title="Strike-Abstand der Vorlage in Prozent des Underlying-Kurses">Breite&nbsp;(%)
-          <input type="number" id="g_tpl_w" value="5" min="0.5" max="50" step="0.5" style="width:4.5rem">
+        <label title="Strike-Abstand der Vorlage in Strike-Punkten (z.&thinsp;B. 5 = 5 $ Abstand zum Spot je Stufe). Vorbelegt aus dem Strike-Raster der Kette.">Breite&nbsp;(Punkte)
+          <input type="number" id="g_tpl_w" value="5" min="0.01" step="0.5" style="width:5.5rem">
         </label>
         <button type="button" class="primary" id="g_tpl_go">Vorlage anwenden</button>
       </div>
@@ -503,8 +503,8 @@ const dataUrl = path => BASE + "/" + path + (KEY ? "?key=" + encodeURIComponent(
 
 // Kennzahl-Kachel (Readout-Zelle): Label · Wert (mono) · optionale Einheit ·
 // Zustand pos/neg/warn/accent färbt Wert + linke Leiste. Nur Präsentation.
-const tile = (k, v, u = "", state = "") =>
-  `<div class="tile"${state ? ` data-state="${state}"` : ""}>` +
+const tile = (k, v, u = "", state = "", title = "") =>
+  `<div class="tile"${state ? ` data-state="${state}"` : ""}${title ? ` title="${title}"` : ""}>` +
   `<span class="k">${k}</span>` +
   `<span class="v">${v}${u ? `<span class="u">${u}</span>` : ""}</span></div>`;
 const signState = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
@@ -1092,6 +1092,7 @@ async function resolveSpot() {
     $("spotinfo").title = "Kein CRSP-Kurs für dieses Underlying (z. B. Index) — " +
       "Spot aus der 0,5-Delta-Kreuzung des nächsten Verfalls interpoliert.";
   }
+  suggestTplWidth();            // Vorlagen-Breite jetzt am echten Spot ausrichten
   applyChainGreekEstimates();   // Spot da -> Sentinel-Greeks schätzen + Ansicht neu zeichnen
 }
 
@@ -1490,6 +1491,42 @@ function breakevens(xs, ys) {
   return bes;
 }
 
+// Kennzahlen der Position an einer Stelle — von Aufbau, Monte-Carlo und
+// realisiertem Ergebnis gemeinsam genutzt, damit alle dieselbe Kapitalbasis
+// für die Rendite verwenden.
+//
+// **Kapitalbindung** = der maximal mögliche Verlust (bei begrenztem Risiko),
+// mindestens aber der gezahlte Debit. Für Debit-Strategien ist das der Einsatz,
+// für Credit-Strategien das tatsächliche Risiko (Cash-Secured Put: Strike −
+// Prämie; Iron Condor: Flügelbreite − Credit) — also das, was hinterlegt werden
+// muss. Das ist bewusst KEINE Broker-Margin (kein Reg-T-/SPAN-Modell, keine
+// Gebühren); bei unbegrenztem Risiko (nackter Short Call) gibt es keine
+// belastbare Zahl → `capital = null` und die Rendite bleibt „—".
+function payoffStats(model) {
+  const grid = payoffGrid();
+  const [xs, ys] = augmentZero(grid, grid.map(S => pnlModel(model, S)));
+  const cost = legs.reduce((a, l) => a + l.side * l.qty * l.prem * CS(l), 0);
+  // Asymptotische Steigung rechts (Calls + Aktien-Legs): ≠ 0 → unbegrenzt
+  const slopeR = legs.reduce((a, l) =>
+    a + ((l.kind === "stock" || l.opt.call_put === "C") ? l.side * l.qty * CS(l) : 0), 0);
+  // S = 0 explizit mitnehmen: dort liegt der Maximalverlust von Puts/Aktien-Legs,
+  // und pnlModel fängt S <= 0 sauber über den inneren Wert ab (kein log(0))
+  const yAll = ys.concat(pnlModel(model, 0));
+  const maxP = slopeR > 0 ? Infinity : Math.max(...yAll);
+  const maxL = slopeR < 0 ? -Infinity : Math.min(...yAll);
+  const capital = maxL === -Infinity ? null : (Math.max(-maxL, cost, 0) || null);
+  return { xs, ys, bes: breakevens(xs, ys), cost, maxP, maxL, capital };
+}
+// Rendite auf die Kapitalbindung; null, wenn keine belastbare Basis existiert
+const roi = (pnl, capital) =>
+  (capital == null || !Number.isFinite(pnl)) ? null : pnl / capital * 100;
+// Renditekachel: null → „—" ohne Einheit, Infinity → „unbegrenzt", sonst ±x,x %
+// (pre = „≈ ", wenn Modellwerte in die Rechnung eingehen)
+const roiTile = (label, r, pre = "", title = "") =>
+  r === Infinity ? tile(label, "unbegrenzt", "", "pos", title)
+  : r == null ? tile(label, "—", "", "", title)
+  : tile(label, pre + (r > 0 ? "+" : "") + fmtNum(r, 1), "%", signState(r), title);
+
 // Hex-Token (--ok/--err) als halbtransparentes rgba für Plotly-Flächen
 function hexA(hex, a) {
   const h = hex.replace("#", "").trim();
@@ -1567,9 +1604,10 @@ function detectStrategy() {
 }
 
 // ---- Strategievorlagen ----------------------------------------------------
-// m = Strike-Ziel als Vielfaches der „Breite“ relativ zum Spot (m = 0 → ATM,
-// m = +1 → Spot × (1 + Breite)). Gerundet wird auf den nächsten Strike der Kette,
-// der einen zweiseitigen Quote hat. e:"back" → hinterer Verfall (Zeitspreads).
+// m = Strike-Ziel als Vielfaches der „Breite“ (in Strike-Punkten) relativ zum
+// Spot: m = 0 → ATM, m = +1 → Spot + Breite, m = −2 → Spot − 2 × Breite.
+// Gerundet wird auf den nächsten Strike der Kette, der einen zweiseitigen Quote
+// hat. e:"back" → hinterer Verfall (Zeitspreads).
 const TEMPLATES = [
   { id: "lc",   g: "Einfach",  n: "Long Call",                  l: [{ s: 1, cp: "C", m: 0 }] },
   { id: "lp",   g: "Einfach",  n: "Long Put",                   l: [{ s: 1, cp: "P", m: 0 }] },
@@ -1625,6 +1663,39 @@ function fillTemplateExps() {
   $("g_tpl_e1").value = e1;
   $("g_tpl_e2").value = exps.find(e => daysTo(e) >= 3 * d1) ?? exps[exps.length - 1];
   $("g_tpl").onchange();
+  tplWidthAuto = true;   // neue Kette -> Breite wieder vorschlagen
+  suggestTplWidth();
+}
+$("g_tpl_e1").onchange = suggestTplWidth;
+
+// Strike-Raster der Kette rund um den Geldbereich (Median der Abstände). Weit
+// aus dem Geld wird das Raster grober, deshalb nur ±20 % um den Referenzkurs.
+function strikeStep(exp, ref) {
+  const ks = [...new Set(rows.filter(r => r.expiration === exp).map(r => r.strike / 1000))]
+    .sort((a, b) => a - b);
+  if (ks.length < 2) return null;
+  const near = ks.filter(k => k >= ref * 0.8 && k <= ref * 1.2);
+  const use = near.length >= 3 ? near : ks;
+  const gaps = use.slice(1).map((k, i) => k - use[i]).filter(g => g > 0).sort((a, b) => a - b);
+  return gaps.length ? gaps[Math.floor(gaps.length / 2)] : null;
+}
+
+// Die Breite steht in Strike-PUNKTEN (nicht Prozent) — ein fester Vorgabewert
+// wäre bei AAPL (~130) und SPX (~4300) nie gleichzeitig sinnvoll. Vorgeschlagen
+// wird daher das Vielfache des Strike-Rasters, das ~5 % des Kurses am nächsten
+// kommt; so landen m = ±1 … ±3 immer auf echten, verschiedenen Strikes.
+let tplWidthAuto = true;   // false, sobald der Nutzer die Breite selbst setzt
+$("g_tpl_w").oninput = () => { tplWidthAuto = false; };
+function suggestTplWidth() {
+  if (!tplWidthAuto || !rows.length) return;
+  const e1 = +$("g_tpl_e1").value;
+  const ks = rows.filter(r => r.expiration === e1).map(r => r.strike / 1000).sort((a, b) => a - b);
+  if (!ks.length) return;
+  const ref = spot ? spot.value : ks[Math.floor(ks.length / 2)];
+  const step = strikeStep(e1, ref);
+  if (!step) return;
+  $("g_tpl_w").value = +Math.max(step, Math.round(ref * 0.05 / step) * step).toFixed(4);
+  $("g_tpl_w").step = step;
 }
 
 // Strike-Wahl einer Vorlage: nächster Strike zum Ziel, der (a) auf der richtigen
@@ -1634,7 +1705,7 @@ function fillTemplateExps() {
 function pickTplLeg(d, exp, S, w, bounds) {
   const key = `${exp}|${d.cp}`;
   const b = bounds.get(key) || { min: Infinity, max: -Infinity };
-  const target = S * (1 + d.m * w) * 1000;
+  const target = (S + d.m * w) * 1000;
   const base = rows.filter(r => r.expiration === exp && r.call_put === d.cp &&
     r.best_bid > 0 && r.best_offer > 0 &&
     (d.m > 0 ? r.strike > b.max : d.m < 0 ? r.strike < b.min : true));
@@ -1656,7 +1727,8 @@ $("g_tpl_go").onclick = () => {
   const back = tplNeedsBack(t);
   if (!e1 || (back && !e2)) { hint("Verfall wählen.", true); return; }
   if (back && e2 <= e1) { hint("Für diese Vorlage muss der 2. Verfall später liegen als der erste.", true); return; }
-  const w = Math.min(0.5, Math.max(0.005, (+$("g_tpl_w").value || 5) / 100));
+  const w = +$("g_tpl_w").value;
+  if (!(w > 0)) { hint("Breite in Strike-Punkten angeben (größer als 0).", true); return; }
   const S = spot.value, bounds = new Map(), out = new Array(t.l.length).fill(null), missing = [];
   // ATM-Legs zuerst wählen (kleinstes |m|), damit sie den Anker für die Flügel setzen
   const order = t.l.map((d, i) => i).sort((a, b) => Math.abs(t.l[a].m ?? 0) - Math.abs(t.l[b].m ?? 0));
@@ -1665,7 +1737,7 @@ $("g_tpl_go").onclick = () => {
     if (d.stock) { out[i] = makeStockLeg(d.stock, d.q || 1); continue; }
     const exp = d.e === "back" ? e2 : e1;
     const o = pickTplLeg(d, exp, S, w, bounds);
-    if (!o) { missing.push(`${d.cp === "C" ? "Call" : "Put"} ≈ ${fmtNum(S * (1 + d.m * w), 2)} (${fmtDate(exp)})`); continue; }
+    if (!o) { missing.push(`${d.cp === "C" ? "Call" : "Put"} ≈ ${fmtNum(S + d.m * w, 2)} (${fmtDate(exp)})`); continue; }
     out[i] = makeOptLeg(d.s, d.q || 1, o);
   }
   const built = out.filter(Boolean);
@@ -1684,7 +1756,7 @@ $("g_tpl_go").onclick = () => {
   invalidateRealized();
   hint(missing.length
     ? `Vorlage „${t.n}“ nur teilweise angewendet — kein handelbarer Quote für: ${missing.join(", ")}.`
-    : `Vorlage „${t.n}“ angewendet · Breite ${(w * 100).toFixed(1)} % · Strikes auf die Kette gerundet.`,
+    : `Vorlage „${t.n}“ angewendet · Breite ${fmtNum(w, 3)} Punkte · Strikes auf die Kette gerundet.`,
     missing.length > 0);
 };
 
@@ -1785,16 +1857,7 @@ async function drawPayoff() {
   const model = buildModel(ed);
   const nModel = model.filter(m => m.T > 0).length;                    // Legs mit Restlaufzeit
   const nNoSig = model.filter(m => m.T > 0 && !(m.sig > 0)).length;    // davon ohne IV
-  const grid = payoffGrid();
-  const [xs, ys] = augmentZero(grid, grid.map(S => pnlModel(model, S)));
-  const bes = breakevens(xs, ys);
-  const cost = legs.reduce((a, l) => a + l.side * l.qty * l.prem * CS(l), 0);
-  // Asymptotische Steigung rechts (Calls + Aktien-Legs): ≠ 0 → unbegrenzt
-  const slopeR = legs.reduce((a, l) =>
-    a + ((l.kind === "stock" || l.opt.call_put === "C") ? l.side * l.qty * CS(l) : 0), 0);
-  const yAll = ys.concat(pnlModel(model, 1e-6));
-  const maxP = slopeR > 0 ? Infinity : Math.max(...yAll);
-  const maxL = slopeR < 0 ? -Infinity : Math.min(...yAll);
+  const { xs, ys, bes, cost, maxP, maxL, capital } = payoffStats(model);
   const g = { delta: 0, gamma: 0, vega: 0, theta: 0 };
   for (const l of legs) {                    // Netto-Greeks pro Option (nicht ×Kontraktgröße);
     if (l.kind === "stock") { g.delta += l.side * l.qty; continue; }   // 100 Aktien = Delta 1
@@ -1810,11 +1873,16 @@ async function drawPayoff() {
   if (nModel) notes.push(`Bewertung zum ${fmtDate(ed)}: ${nModel} Leg(s) laufen dann noch — deren Wert ist ` +
     `ein Black-Scholes-Modellwert (r = q = 0, IV vom Einstieg), keine Marktbeobachtung.`);
   if (nNoSig) notes.push(`${nNoSig} davon ohne verwertbare IV — dort steht nur der innere Wert.`);
+  const CAPHINT = "Maximal möglicher Verlust (mindestens der gezahlte Debit) — " +
+    "das ist die Kapitalbindung, keine Broker-Margin. Ohne Verlustbegrenzung nicht bestimmbar.";
   $("g_stats").innerHTML =
     `<div class="tiles">` +
       tile(cost >= 0 ? "Einsatz (Debit)" : "Prämieneinnahme (Credit)", fmtNum(Math.abs(cost), 2), "", "accent") +
+      tile("Kapitalbindung", capital == null ? "—" : mp + fmtNum(capital, 2), "", "", CAPHINT) +
       tile("Max. Gewinn", money(maxP), "", "pos") +
       tile("Max. Verlust", money(maxL), "", "neg") +
+      roiTile("Max. Rendite", maxP === Infinity ? Infinity : roi(maxP, capital), mp,
+              "Maximaler Gewinn bezogen auf die Kapitalbindung — ohne Gebühren, Zinsen und Steuern.") +
       tile("Breakeven", bes.length ? mp + bes.map(b => fmtNum(b, 2)).join(" / ") : "—") +
     `</div>` +
     `<div class="tiles greeks">` +
@@ -1968,6 +2036,11 @@ async function onRealizedDateChange() {
     const compareTile = px == null ? "" :
       tile(`Bei sofortigem Verfall @ ${fmtNum(px, 2)} (innerer Wert)`,
         fmtNum(pnlAt(px, null), 2), "", signState(pnlAt(px, null)));
+    // Kapitalrendite auf dieselbe Basis wie in der Aufbau-Karte
+    const cap = payoffStats(buildModel(evalDate())).capital;
+    const capTile = roiTile("Rendite", complete ? roi(pnl, cap) : null, "",
+      cap == null ? "Ohne Verlustbegrenzung gibt es keine belastbare Kapitalbasis."
+        : `Ergebnis bezogen auf die Kapitalbindung (${fmtNum(cap, 2)}) — ohne Gebühren, Zinsen und Steuern.`);
     const nMiss = perLeg.filter(p => p.exit == null).length;
     $("r_out").innerHTML =
       `<div class="hero"><span class="k">Realisiert am ${fmtDate(d)}</span>` +
@@ -1975,7 +2048,7 @@ async function onRealizedDateChange() {
       (complete ? "" : `<span class="sub"><span class="warn">${nMiss} von ${legs.length} ` +
         `Legs ohne Quote — Ergebnis unvollständig</span></span>`) +
       `</div>` +
-      (compareTile ? `<div class="tiles">${compareTile}</div>` : "");
+      `<div class="tiles">${capTile}${compareTile}</div>`;
   } catch (e) {
     realizedPoint = null;
     $("r_out").textContent = "Fehler: " + e.message;
@@ -2194,10 +2267,14 @@ $("mc_run").onclick = async () => {
   const q = p => sorted[Math.min(n - 1, Math.floor(p * n))];
   const mean = pnls.reduce((a, b) => a + b, 0) / n;
   const pWin = pnls.reduce((a, b) => a + (b > 0 ? 1 : 0), 0) / n;
+  const cap = payoffStats(model).capital;
   $("mc_out").innerHTML =
     `<div class="tiles">` +
       tile("P(Gewinn)", (pWin * 100).toFixed(1), "%", pWin >= 0.5 ? "pos" : "") +
       tile("Ø Ergebnis", fmtNum(mean, 2), "", signState(mean)) +
+      roiTile("Ø Rendite", roi(mean, cap), nModel ? "≈ " : "",
+              "Erwartetes Ergebnis bezogen auf die Kapitalbindung " +
+              (cap == null ? "" : `(${fmtNum(cap, 2)}) `) + "— ohne Gebühren, Zinsen und Steuern.") +
       tile("Median", fmtNum(q(0.5), 2), "", signState(q(0.5))) +
       tile("5 % / 95 %-Quantil", `${fmtNum(q(0.05), 2)} / ${fmtNum(q(0.95), 2)}`) +
     `</div>` +
