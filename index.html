@@ -226,6 +226,81 @@
 
   @keyframes tick { from { opacity: 0.55; } to { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .tile { animation: none; } }
+
+  /* ---- KI-Assistent: andockbarer Drawer rechts ---------------------------
+     Er überlagert nichts: der Body bekommt rechts Platz, und nach dem Öffnen
+     wird ein resize-Event ausgelöst, damit Plotly neu layoutet. */
+  #ai_toggle { font-size: 0.8rem; padding: 0.3rem 0.7rem; }
+  #ai_toggle.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .aidrawer {
+    position: fixed; inset: 0 0 0 auto; z-index: 40;
+    width: 390px; max-width: 100vw; display: flex; flex-direction: column;
+    background: var(--panel); border-left: 1px solid var(--border);
+    transform: translateX(100%); transition: transform 0.18s ease, visibility 0.18s;
+    visibility: hidden;   /* geschlossen: nicht per Tab erreichbar */
+  }
+  .aidrawer.open { transform: none; visibility: visible; }
+  body.ai-open { padding-right: calc(390px + 1.5rem); }
+  @media (max-width: 900px) {
+    .aidrawer { width: 100vw; }
+    body.ai-open { padding-right: 1.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { .aidrawer { transition: none; } }
+  .aidrawer > header {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.75rem; font-weight: 650; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--secondary);
+  }
+  .aidrawer > header .grow { flex: 1; }
+  .aidrawer > header .who { font-size: 0.68rem; letter-spacing: 0; text-transform: none;
+    color: var(--muted); font-family: var(--mono); }
+  select.aimodel { font-size: 0.72rem; padding: 0.15rem 0.35rem; letter-spacing: 0;
+    text-transform: none; font-weight: 400; color: var(--secondary); }
+  #ai_chips { display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0.6rem 0.9rem 0;
+    border-bottom: 1px solid var(--border); padding-bottom: 0.6rem; }
+  .aichip {
+    background: var(--inset); border: 1px solid var(--border); color: var(--secondary);
+    border-radius: 999px; padding: 0.25rem 0.65rem; font-size: 0.76rem; cursor: pointer;
+  }
+  .aichip:hover { border-color: var(--accent); color: var(--accent); }
+  #ai_log { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 0.55rem;
+    padding: 0.8rem 0.9rem; }
+  .aimsg { border-radius: 8px; padding: 0.5rem 0.7rem; font-size: 0.87rem; line-height: 1.5;
+    border: 1px solid var(--border); overflow-wrap: anywhere; }
+  .aimsg.user { background: var(--accent-soft); color: var(--fg); margin-left: 1.4rem; }
+  .aimsg.bot { background: var(--inset); border-left: 3px solid var(--accent); color: var(--fg); }
+  .aimsg.err { background: var(--inset); border-left: 3px solid var(--err); color: var(--err); }
+  .aimsg code { font-family: var(--mono); font-size: 0.85em; background: var(--bg);
+    padding: 0 0.25rem; border-radius: 3px; }
+  .aimsg .cursor { color: var(--accent); }
+  #ai_log .hintline { color: var(--muted); font-size: 0.8rem; }
+  .aidrawer > footer { border-top: 1px solid var(--border); padding: 0.6rem 0.9rem 0.8rem; }
+  #ai_form { display: flex; gap: 0.5rem; align-items: flex-end; }
+  #ai_text { flex: 1; resize: none; min-height: 2.4rem; max-height: 8rem; font-family: var(--sans);
+    font-size: 0.87rem; }
+  .aifoot { display: flex; gap: 0.7rem; margin-top: 0.5rem; font-size: 0.74rem; color: var(--muted); }
+  .aifoot button { background: none; border: none; padding: 0; color: var(--muted);
+    text-decoration: underline; font-size: 0.74rem; }
+  .aifoot button:hover { color: var(--accent); }
+
+  /* Aufklärungs-/Vorschau-Dialog */
+  dialog.aidlg {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--border-lit);
+    border-radius: 10px; padding: 1.1rem 1.2rem; width: min(660px, calc(100vw - 3rem));
+    font: 15px/1.55 var(--sans);
+  }
+  dialog.aidlg::backdrop { background: rgba(5, 8, 13, 0.6); }
+  dialog.aidlg h2 { font-size: 1rem; margin: 0 0 0.6rem; }
+  dialog.aidlg p { font-size: 0.87rem; color: var(--secondary); margin: 0 0 0.7rem; }
+  dialog.aidlg pre { max-height: 42vh; overflow: auto; background: var(--inset);
+    border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.7rem;
+    font-family: var(--mono); font-size: 0.76rem; white-space: pre-wrap; word-break: break-word;
+    color: var(--secondary); }
+  dialog.aidlg .dlgrow { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.9rem; }
+  dialog.aidlg .dlgrow .grow { flex: 1; }
+  dialog.aidlg label.inline { flex-direction: row; align-items: center; gap: 0.4rem;
+    text-transform: none; letter-spacing: 0; font-size: 0.8rem; color: var(--secondary); }
 </style>
 </head>
 <body>
@@ -233,6 +308,8 @@
   <h1><b>Option</b>Search</h1>
   <span class="ctx">Optionsketten &middot; IV-Fl&auml;chen &middot; Strategien &middot; OptionMetrics&nbsp;1996&ndash;2021</span>
   <span class="grow"></span>
+  <button type="button" class="ghost" id="ai_toggle"
+          title="KI-Assistent: erkl&auml;rt Bedienung und interpretiert die aktuelle Ansicht">&#129302; Assistent</button>
   <span id="status" class="statuschip">Initialisiere &hellip;</span>
 </div>
 
@@ -466,16 +543,63 @@
   </div>
 </div>
 
+<aside id="aidrawer" class="aidrawer" aria-label="KI-Assistent">
+  <header>
+    <span>&#129302; Assistent</span>
+    <span class="who" id="ai_who"></span>
+    <select id="ai_model" class="aimodel hidden"
+            title="Modell &mdash; gilt ab der n&auml;chsten Frage, pro Ger&auml;t gespeichert"></select>
+    <span class="grow"></span>
+    <button type="button" class="ghost iconbtn" id="ai_close" title="Schlie&szlig;en">&#10005;</button>
+  </header>
+  <div id="ai_chips"></div>
+  <div id="ai_log"></div>
+  <footer>
+    <form id="ai_form">
+      <textarea id="ai_text" rows="1" placeholder="Frage zur aktuellen Ansicht &hellip;"
+                spellcheck="false"></textarea>
+      <button type="submit" class="primary" id="ai_send">Senden</button>
+      <button type="button" class="ghost hidden" id="ai_stop">Stopp</button>
+    </form>
+    <div class="aifoot">
+      <button type="button" id="ai_preview">Was wird gesendet?</button>
+      <button type="button" id="ai_clear">Verlauf leeren</button>
+    </div>
+  </footer>
+</aside>
+
+<dialog id="ai_dlg" class="aidlg">
+  <h2 id="ai_dlg_h">Daten an den KI-Dienst senden?</h2>
+  <p id="ai_dlg_p"></p>
+  <pre id="ai_dlg_json"></pre>
+  <div class="dlgrow">
+    <label class="inline" id="ai_dlg_askwrap">
+      <input type="checkbox" id="ai_dlg_ask"> vor jedem Senden erneut fragen
+    </label>
+    <span class="grow"></span>
+    <button type="button" class="ghost" id="ai_dlg_cancel">Abbrechen</button>
+    <button type="button" class="primary" id="ai_dlg_ok">Senden</button>
+  </div>
+</dialog>
+
 <details>
   <summary>Einstellungen (Datenquelle)</summary>
   <div class="row">
     <label>Daten-Basis-URL
       <input id="cfg_base" placeholder="http://localhost:8137/data">
     </label>
-    <label>Zugriffsschl&uuml;ssel (nur Cloud-Betrieb)
+    <label title="F&uuml;r Cloud-Daten UND f&uuml;r den KI-Assistenten &mdash; der l&auml;uft immer &uuml;ber den Worker">
+      Zugriffsschl&uuml;ssel (Cloud-Daten &amp; KI)
       <input id="cfg_key" placeholder="leer = kein Schl&uuml;ssel">
     </label>
+    <label>KI-Endpunkt (optional, sonst Worker)
+      <input id="cfg_ai" placeholder="z.&thinsp;B. http://127.0.0.1:8787">
+    </label>
     <button type="button" class="ghost" id="cfg_save" style="align-self:flex-end">Speichern &amp; neu laden</button>
+  </div>
+  <div class="row">
+    <button type="button" class="ghost" id="cfg_ai_reset">KI-Freigabe zur&uuml;cksetzen</button>
+    <span id="cfg_ai_state" style="align-self:center"></span>
   </div>
 </details>
 
@@ -509,11 +633,19 @@ const tile = (k, v, u = "", state = "", title = "") =>
   `<span class="v">${v}${u ? `<span class="u">${u}</span>` : ""}</span></div>`;
 const signState = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
 
+// KI-Endpunkt: standardmäßig IMMER der Worker (auch wenn die Daten lokal aus
+// opt_server.py kommen — der hat keinen /ai-Zweig). Nur zum Testen gegen einen
+// lokalen `wrangler dev` lässt er sich in den Einstellungen überschreiben.
+const AI_BASE = (localStorage.getItem("os_ai_base") || WORKER_BASE).replace(/\/+$/, "");
+
 $("cfg_base").value = BASE;
 $("cfg_key").value = KEY;
+$("cfg_ai").value = localStorage.getItem("os_ai_base") || "";
 $("cfg_save").onclick = () => {
   localStorage.setItem("os_base", $("cfg_base").value.trim().replace(/\/+$/, ""));
   localStorage.setItem("os_key", $("cfg_key").value.trim());
+  const ai = $("cfg_ai").value.trim().replace(/\/+$/, "");
+  if (ai) localStorage.setItem("os_ai_base", ai); else localStorage.removeItem("os_ai_base");
   location.reload();
 };
 
@@ -523,6 +655,7 @@ let queryDate = null, view = "table", plotlyReady = null;
 let seriesData = null, seriesLoading = false, seriesAbort = false, lastSeriesSel = null;
 let permnos = null, spot = null, legs = [];
 let realizedPoint = null, realizedCurve = null, curveLoading = false, curveAbort = false;
+let mcResult = null;   // letzte Monte-Carlo-Simulation (nur für den KI-Kontext)
 
 // ---- Start: Manifest + Ticker laden und DuckDB-WASM parallel initialisieren ----
 const manifestReady = (async () => {
@@ -1979,6 +2112,7 @@ $("r_date").onchange = onRealizedDateChange;
 
 function invalidateRealized() {
   realizedCurve = null;
+  mcResult = null;        // Legs geändert → alte Simulation passt nicht mehr
   populateRealizedPicker();
   onRealizedDateChange();
 }
@@ -2268,6 +2402,9 @@ $("mc_run").onclick = async () => {
   const mean = pnls.reduce((a, b) => a + b, 0) / n;
   const pWin = pnls.reduce((a, b) => a + (b > 0 ? 1 : 0), 0) / n;
   const cap = payoffStats(model).capital;
+  mcResult = { sigma, mu, n, evalDay: ed, tage: Math.round(T * 365), s0: S0,
+               volQuelle: $("mc_vsrc").value, pWin, mean, median: q(0.5),
+               q05: q(0.05), q95: q(0.95), kapital: cap, modellLegs: nModel };
   $("mc_out").innerHTML =
     `<div class="tiles">` +
       tile("P(Gewinn)", (pWin * 100).toFixed(1), "%", pWin >= 0.5 ? "pos" : "") +
@@ -2381,6 +2518,550 @@ $("xlsx").onclick = async () => {
     status("Excel-Export fehlgeschlagen: " + e.message, "err");
   }
 };
+
+/* ==========================================================================
+   KI-Assistent — Tier 1: „Kontext-Erklärer"
+
+   Der Assistent kennt NUR den Schnappschuss, der beim Klick auf „Senden"
+   gebaut wird (buildAiContext) — keine Rohdaten, keine Datenbankabfragen,
+   keine Hintergrundbeobachtung. Der Schlüssel des LLM-Anbieters liegt
+   ausschließlich im Cloudflare-Worker (/ai), der Provider ist dort
+   umschaltbar; die Seite kennt nur `{system, messages}` rein und
+   `data: {"text": …}` raus.
+   ========================================================================== */
+
+const AI_URL = AI_BASE + "/ai" + (KEY ? "?key=" + encodeURIComponent(KEY) : "");
+
+const SYSTEM_PROMPT = `
+Du bist der eingebaute Assistent der Web-App „OptionSearch". Antworte auf
+Deutsch, sachlich, knapp (in der Regel unter 150 Wörtern) und ohne Floskeln.
+Duze den Nutzer — die Oberfläche duzt ebenfalls.
+
+DIE APP
+OptionSearch fragt historische Optionsdaten (OptionMetrics/IvyDB, 1996-01-04
+bis 2021-06-30) und CRSP-Tageskurse ab. Man wählt einen Handelstag und ein
+Underlying (Ticker oder SecID) und bekommt vier Ansichten:
+- „Tabelle": die Optionskette des Tages, filterbar nach Verfall und Typ.
+- „IV-Fläche": 3D-Fläche Strike × Restlaufzeit × implizite Volatilität;
+  mit einem einzelnen Verfall im Filter wird daraus ein 2D-Smile.
+- „Zeitreihe": eine einzelne Option über die Zeit (Mid/Bid/Ask/IV/Volumen/
+  Open Interest/Greeks umschaltbar), optional mit dem Underlying-Kurs.
+- „Strategie": drei Karten — (1) Aufbau (Vorlage anwenden oder Legs
+  zusammenklicken, Bewertungstag wählbar, Payoff-Diagramm, Kapitalbindung,
+  Max-Gewinn/-Verlust, Breakevens, Greeks), (2) Monte-Carlo (P(Gewinn), Ø,
+  Median, 5/95-%-Quantile), (3) Realisiertes Ergebnis (echter P/L an einem
+  wählbaren Auswertungstag, optional als Kurve über die Halteperiode).
+
+METHODIK, DIE DU BEIM INTERPRETIEREN KENNEN UND NENNEN MUSST
+- Einstieg wird realistisch gerechnet: Kauf zum Ask, Verkauf zum Bid;
+  Glattstellung spiegelbildlich (Long zum Bid, Short zum Ask). Deshalb kann
+  eine realisierte Rendite −100 % leicht unterschreiten.
+- Kapitalbindung = maximal möglicher Verlust, mindestens der gezahlte Debit.
+  Das ist KEINE Broker-Margin (kein Reg-T/SPAN), ohne Gebühren, Zinsen und
+  Steuern. Bei unbegrenztem Risiko gibt es keine Basis → Rendite bleibt „—".
+- Legs mit Restlaufzeit am Bewertungstag werden mit Black-Scholes bewertet
+  (r = q = 0, konstante IV vom Einstieg, kein Smile) — Modellwert, keine
+  Marktbeobachtung. Im Kontext sind solche Werte mit "geschaetzt": true bzw.
+  "modell_legs" markiert.
+- Monte-Carlo ist eine reine Terminalwert-Simulation (GBM/Black-Scholes-Welt):
+  keine Pfadabhängigkeit, kein Smile, kein Sprungrisiko. Der Drift ist frei
+  wählbar; ob er als P- oder Q-Maß zu lesen ist, entscheidet der Nutzer.
+- Realisierte Vol = Standardabweichung der letzten 252 CRSP-Tagesrenditen × √252.
+- Spot: primär CRSP-Schlusskurs. Indizes (SPX, NDX, VIX …) haben keinen
+  CRSP-Link → der Spot wird aus der 0,5-Delta-Kreuzung interpoliert und ist
+  dann geschätzt.
+- Fehlende Greeks/IV (OptionMetrics-Sentinel −99,99) schätzt die Seite selbst
+  per Black-Scholes und markiert sie; tief im/aus dem Geld bleibt „—".
+- Konventionen der Rohdaten: Strikes sind ×1000 gespeichert, Datumsfelder
+  als Ganzzahl YYYYMMDD. Im Kontext, den du bekommst, ist beides bereits
+  umgerechnet (Strike in Dollar, Datum als ISO).
+
+VERHALTENSREGELN
+- Du rechnest nichts nach und rufst keine Daten ab. Du interpretierst
+  ausschließlich die Zahlen im mitgeschickten Zustand. Fehlt eine Zahl, sage
+  das ("dazu steht im aktuellen Zustand nichts") statt zu raten.
+- Erfinde nie Werte, Ticker, Kurse oder Marktereignisse.
+- Geschätzte Größen kennzeichnest du in der Antwort ebenfalls als geschätzt
+  (≈ oder „geschätzt"), so wie die Oberfläche es tut.
+- Keine Anlageberatung und keine Kauf-/Verkaufsempfehlung. Qualitative
+  Hinweise auf Risikostruktur (z. B. „rechts unbegrenzt — ein gekaufter Call
+  weiter draußen würde das deckeln") sind erwünscht.
+- Die Daten sind historisch und enden am 30.06.2021. Es gibt keine aktuellen
+  Kurse und keine Live-Marktlage.
+- Bei Bedienfragen: beschreibe konkret, welche Schaltfläche/welches Feld in
+  welcher Ansicht zu benutzen ist.
+`.trim();
+
+// ---- Kontext-Serialisierung: kompakter Schnappschuss der aktiven Ansicht ----
+const aiR = (v, d = 2) => (v == null || !isFinite(v)) ? null : +(+v).toFixed(d);
+const aiMoney = v => v === Infinity ? "unbegrenzt" : v === -Infinity ? "unbegrenzt" : aiR(v, 2);
+
+function aiChainInfo() {
+  if (!rows.length) return null;
+  const exps = [...new Set(rows.map(r => r.expiration))].sort((a, b) => a - b);
+  const ks = [...new Set(rows.map(r => r.strike / 1000))].sort((a, b) => a - b);
+  return {
+    zeilen: rows.length,
+    zeilen_nach_filter: filtered().length,
+    filter: {
+      verfall: $("f_exp").value ? fmtDate(+$("f_exp").value) : "alle",
+      typ: $("f_cp").value === "C" ? "nur Calls" : $("f_cp").value === "P" ? "nur Puts" : "Calls + Puts",
+    },
+    verfaelle: exps.slice(0, 12).map(e => ({ datum: fmtDate(e), tage_bis_verfall: daysTo(e) })),
+    verfaelle_gesamt: exps.length,
+    strike_bereich: [aiR(ks[0]), aiR(ks[ks.length - 1])],
+    greeks_geschaetzt: rows.filter(r => r._estMode === "bs").length,
+    ohne_zweiseitigen_markt: rows.filter(r => !(r.best_bid > 0 && r.best_offer > 0)).length,
+  };
+}
+
+function aiSurfaceInfo() {
+  const rs = filtered();
+  const exps = [...new Set(rs.map(r => r.expiration))].sort((a, b) => a - b).slice(0, 8);
+  const S = spot ? spot.value : null;
+  const je = exps.map(e => {
+    const cand = rs.filter(r => r.expiration === e && usableIv(r.implied_vol));
+    if (!cand.length) return null;
+    const atm = S
+      ? cand.reduce((b, r) => Math.abs(r.strike / 1000 - S) < Math.abs(b.strike / 1000 - S) ? r : b)
+      : cand[Math.floor(cand.length / 2)];
+    const ivs = cand.map(r => r.implied_vol);
+    return {
+      verfall: fmtDate(e), tage: daysTo(e), punkte: cand.length,
+      atm_iv: aiR(atm.implied_vol, 4), atm_strike: aiR(atm.strike / 1000),
+      iv_min: aiR(Math.min(...ivs), 4), iv_max: aiR(Math.max(...ivs), 4),
+    };
+  }).filter(Boolean);
+  return {
+    darstellung: $("f_exp").value ? "2D-Smile (ein Verfall gefiltert)" : "3D-Fläche",
+    x_achse: $("iv_xaxis").options[$("iv_xaxis").selectedIndex].text,
+    je_verfall: je,
+  };
+}
+
+function aiSeriesInfo() {
+  if (!seriesData || !seriesData.points.length)
+    return { geladen: false, hinweis: "Noch keine Zeitreihe geladen (Knopf „Zeitreihe laden“)." };
+  const key = $("s_metric").value, m = METRICS[key];
+  const o = seriesData.opt, ps = seriesData.points;
+  const vals = ps.map(p => ({ d: p.date, y: m.f(p) }))
+                 .filter(p => p.y != null && !isSent(p.y));
+  const ys = vals.map(p => p.y);
+  const u = seriesData.underlying;
+  return {
+    geladen: true,
+    option: { typ: o.call_put === "C" ? "Call" : "Put", strike: aiR(o.strike / 1000),
+              verfall: fmtDate(o.expiration), option_id: o.option_id },
+    zeitraum: { von: fmtDate(ps[0].date), bis: fmtDate(ps[ps.length - 1].date), handelstage: ps.length },
+    metrik: m.label,
+    verlauf: ys.length ? {
+      erster: aiR(ys[0], 4), letzter: aiR(ys[ys.length - 1], 4),
+      min: aiR(Math.min(...ys), 4), max: aiR(Math.max(...ys), 4),
+    } : null,
+    underlying: (u && u.length) ? {
+      erster: aiR(u[0].prc), letzter: aiR(u[u.length - 1].prc),
+      min: aiR(Math.min(...u.map(x => x.prc))), max: aiR(Math.max(...u.map(x => x.prc))),
+    } : null,
+    greeks_geschaetzt: seriesData.nEst || 0,
+  };
+}
+
+function aiStrategyInfo() {
+  if (!legs.length) return { legs: [], hinweis: "Noch keine Legs in der Position." };
+  const ed = evalDate();
+  const model = buildModel(ed);
+  const st = payoffStats(model);
+  const nModel = model.filter(m => m.T > 0).length;
+  const nNoSig = model.filter(m => m.T > 0 && !(m.sig > 0)).length;
+  const g = { delta: 0, gamma: 0, vega: 0, theta: 0 };
+  let gMissing = false;
+  for (const l of legs) {
+    if (l.kind === "stock") { g.delta += l.side * l.qty; continue; }
+    for (const k in g) {
+      if (l.opt[k] == null || isSent(l.opt[k])) gMissing = true;
+      else g[k] += l.side * l.qty * l.opt[k];
+    }
+  }
+  return {
+    name: detectStrategy(),
+    bewertungstag: fmtDate(ed),
+    legs: legs.map(l => l.kind === "stock"
+      ? { instrument: "Aktie (100 Stück)", seite: l.side > 0 ? "long" : "short",
+          menge: l.qty, einstieg: aiR(l.prem) }
+      : { instrument: l.opt.call_put === "C" ? "Call" : "Put", seite: l.side > 0 ? "long" : "short",
+          menge: l.qty, strike: aiR(l.opt.strike / 1000), verfall: fmtDate(l.opt.expiration),
+          einstieg: aiR(l.prem, 4), iv: aiR(l.sigma, 4),
+          greeks_geschaetzt: l.opt._estMode === "bs" }),
+    einsatz_debit: st.cost >= 0 ? aiR(st.cost) : null,
+    credit: st.cost < 0 ? aiR(-st.cost) : null,
+    kapitalbindung: st.capital == null ? null : aiR(st.capital),
+    max_gewinn: aiMoney(st.maxP),
+    max_verlust: aiMoney(st.maxL),
+    max_rendite_prozent: st.maxP === Infinity ? "unbegrenzt" : aiR(roi(st.maxP, st.capital), 1),
+    breakevens: st.bes.map(b => aiR(b)),
+    greeks: gMissing ? null : { delta: aiR(g.delta, 3), gamma: aiR(g.gamma, 4),
+                                vega: aiR(g.vega, 3), theta: aiR(g.theta, 3) },
+    greeks_unvollstaendig: gMissing,
+    modell_legs: nModel,          // Legs, die am Bewertungstag noch laufen (BS-Modellwert)
+    modell_legs_ohne_iv: nNoSig,  // davon ohne verwertbare IV → nur innerer Wert
+    geschaetzt: nModel > 0,
+  };
+}
+
+function aiMcInfo() {
+  if (!mcResult) return { gerechnet: false, hinweis: "Noch keine Simulation gelaufen (Knopf „Simulieren“)." };
+  const q = { iv: "IV der Legs (mengengewichtet)", real: "realisierte Vol (252 Handelstage)", man: "manuell" };
+  return {
+    gerechnet: true,
+    vol_quelle: q[mcResult.volQuelle] || mcResult.volQuelle,
+    vol_prozent: aiR(mcResult.sigma * 100, 1),
+    drift_prozent: aiR(mcResult.mu * 100, 1),
+    pfade: mcResult.n,
+    horizont: { bis: fmtDate(mcResult.evalDay), tage: mcResult.tage, startkurs: aiR(mcResult.s0) },
+    p_gewinn: aiR(mcResult.pWin, 3),
+    mittelwert: aiR(mcResult.mean),
+    median: aiR(mcResult.median),
+    q05: aiR(mcResult.q05),
+    q95: aiR(mcResult.q95),
+    durchschnittsrendite_prozent: aiR(roi(mcResult.mean, mcResult.kapital), 1),
+    modell_legs: mcResult.modellLegs,
+  };
+}
+
+function aiRealizedInfo() {
+  const out = {};
+  if (realizedPoint) {
+    const cap = legs.length ? payoffStats(buildModel(evalDate())).capital : null;
+    out.stichtag = {
+      datum: fmtDate(realizedPoint.date),
+      pnl: aiR(realizedPoint.pnl),
+      rendite_prozent: realizedPoint.complete ? aiR(roi(realizedPoint.pnl, cap), 1) : null,
+      vollstaendig: realizedPoint.complete,
+      legs_ohne_quote: realizedPoint.perLeg.filter(p => p.exit == null).length,
+    };
+  }
+  if (realizedCurve) {
+    const vs = realizedCurve.values.filter(v => v != null);
+    if (vs.length) out.verlauf = {
+      von: fmtDate(realizedCurve.dates[0]),
+      bis: fmtDate(realizedCurve.dates[realizedCurve.dates.length - 1]),
+      handelstage: realizedCurve.dates.length,
+      bester_tag: aiR(Math.max(...vs)), schlechtester_tag: aiR(Math.min(...vs)),
+      letzter: aiR(vs[vs.length - 1]),
+      tage_ohne_quote: realizedCurve.values.length - vs.length,
+    };
+  }
+  if (!out.stichtag && !out.verlauf) out.hinweis = "Noch keine realisierte Auswertung.";
+  return out;
+}
+
+// Wird NUR beim Absenden aufgerufen — friert genau diesen Moment ein.
+function buildAiContext() {
+  const ctx = { ansicht: { table: "Tabelle", surface: "IV-Fläche", series: "Zeitreihe",
+                           strategy: "Strategie" }[view] || view };
+  if (!queryDate || !rows.length) {
+    ctx.status = "Es ist noch keine Auswahl geladen (Handelstag + Ticker/SecID → „Suchen“).";
+    return ctx;
+  }
+  const secid = $("secid").value.trim();
+  const info = manifest?.secids?.[secid];
+  ctx.suche = {
+    handelstag: fmtDate(queryDate),
+    secid: Number(secid) || secid,
+    ticker: $("ticker").value.trim().toUpperCase() || null,
+    datenzeitraum: info ? `${fmtDate(info[0])} bis ${fmtDate(info[1])}` : null,
+  };
+  ctx.spot = spot
+    ? { wert: aiR(spot.value), quelle: spot.source === "crsp" ? "CRSP-Schlusskurs" : "aus 0,5-Delta interpoliert",
+        geschaetzt: spot.source !== "crsp" }
+    : { wert: null, hinweis: "kein Spot verfügbar" };
+  ctx.kette = aiChainInfo();
+  if (view === "surface") ctx.iv_flaeche = aiSurfaceInfo();
+  if (view === "series") ctx.zeitreihe = aiSeriesInfo();
+  if (view === "strategy") {
+    ctx.strategie = aiStrategyInfo();
+    ctx.monte_carlo = aiMcInfo();
+    ctx.realisiertes_ergebnis = aiRealizedInfo();
+  }
+  return ctx;
+}
+
+// ---- Provider/Modell: der Worker sagt, was geht ---------------------------
+// Der Provider bleibt bewusst Worker-Sache (der Aufklärungstext hängt an ihm);
+// das Modell darf die Seite wählen — aber nur aus der Positivliste des Workers.
+let aiMeta = null;                      // {label, model, modelle, training} vom Worker
+const aiModelName = id => {
+  const m = /^claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d+))?$/.exec(id || "");
+  return m ? m[1][0].toUpperCase() + m[1].slice(1) + " " + m[2] + (m[3] ? "." + m[3] : "") : id;
+};
+const aiModel = () => {
+  const gewaehlt = localStorage.getItem("os_ai_model");
+  const liste = aiMeta?.modelle || [];
+  return liste.includes(gewaehlt) ? gewaehlt : (aiMeta?.model || null);
+};
+
+async function aiProviderMeta() {
+  if (aiMeta) return aiMeta;
+  let fehler = null;
+  if (!KEY) {
+    // Der Assistent läuft IMMER über den Worker — auch wenn die Daten lokal aus
+    // opt_server.py kommen. Ohne Zugriffsschlüssel antwortet der Worker mit 403.
+    fehler = "Kein Zugriffsschlüssel gesetzt. Der Assistent läuft über den Cloudflare-Worker — " +
+             "auch im lokalen Betrieb. Trag den Schlüssel unten unter „Einstellungen (Datenquelle)“ ein.";
+  } else {
+    try {
+      const r = await fetch(AI_URL, { method: "GET" });
+      if (r.ok) aiMeta = await r.json();
+      else fehler = r.status === 403
+        ? "Der Zugriffsschlüssel wird vom Worker abgelehnt (403) — bitte in den Einstellungen prüfen."
+        : `Der KI-Dienst antwortet mit HTTP ${r.status}.`;
+    } catch {
+      fehler = "Der KI-Dienst ist nicht erreichbar (Netzwerkfehler).";
+    }
+  }
+  aiMeta ||= { label: "KI-Dienst", model: "", modelle: [], training: true };
+  if (!fehler && aiMeta.bereit === false)
+    fehler = "Im Worker ist kein KI-Schlüssel hinterlegt (Secret fehlt).";
+  aiMeta.fehler = fehler;
+  $("ai_who").textContent = (aiMeta.label || "").replace(/\s*\(.*\)$/, "");   // „Anthropic"
+  const sel = $("ai_model");
+  if ((aiMeta.modelle || []).length > 1) {
+    sel.innerHTML = aiMeta.modelle
+      .map(m => `<option value="${m}"${m === aiModel() ? " selected" : ""}` +
+                ` title="${m}">${aiEsc(aiModelName(m))}</option>`).join("");
+    sel.classList.remove("hidden");
+  } else {
+    sel.classList.add("hidden");
+    $("ai_who").textContent += aiMeta.model ? " · " + aiModelName(aiMeta.model) : "";
+  }
+  return aiMeta;
+}
+$("ai_model").onchange = () => {
+  localStorage.setItem("os_ai_model", $("ai_model").value);
+  aiHint(`Modell: ${aiModelName($("ai_model").value)} — gilt ab der nächsten Frage.`);
+};
+
+function aiConsentText(meta) {
+  return `Deine aktuelle Ansicht wird als aggregierter Auszug an ${meta.label} gesendet — ` +
+    `nur berechnete Werte, die im Bildschirm ohnehin sichtbar sind, keine Rohdaten aus der Datenbank. ` +
+    (meta.training
+      ? "Achtung: Im Gratis-Tarif dieses Anbieters können Eingaben zur Produktverbesserung genutzt werden."
+      : "Die Eingaben werden bei diesem Anbieter nicht zum Training verwendet.");
+}
+
+// Zeigt den Dialog. mode "consent" = mit Senden/Abbrechen, "preview" = nur ansehen.
+function aiDialog(kontext, meta, mode) {
+  return new Promise(resolve => {
+    const dlg = $("ai_dlg");
+    $("ai_dlg_h").textContent = mode === "consent"
+      ? "Daten an den KI-Dienst senden?" : "Das wird beim nächsten Senden übertragen";
+    $("ai_dlg_p").textContent = aiConsentText(meta);
+    $("ai_dlg_json").textContent = JSON.stringify(kontext, null, 2);
+    $("ai_dlg_askwrap").classList.toggle("hidden", mode !== "consent");
+    $("ai_dlg_ask").checked = localStorage.getItem("os_ai_always") === "1";
+    $("ai_dlg_ok").classList.toggle("hidden", mode !== "consent");
+    $("ai_dlg_cancel").textContent = mode === "consent" ? "Abbrechen" : "Schließen";
+    const done = ok => {
+      $("ai_dlg_ok").onclick = $("ai_dlg_cancel").onclick = null;
+      dlg.onclose = null;
+      dlg.close();
+      resolve(ok);
+    };
+    $("ai_dlg_ok").onclick = () => {
+      localStorage.setItem("os_ai_always", $("ai_dlg_ask").checked ? "1" : "0");
+      done(true);
+    };
+    $("ai_dlg_cancel").onclick = () => done(false);
+    dlg.onclose = () => resolve(false);   // Escape
+    dlg.showModal();
+  });
+}
+
+function aiConsentState() {
+  const c = localStorage.getItem("os_ai_consent");
+  $("cfg_ai_state").textContent = c
+    ? `KI-Freigabe erteilt am ${new Date(c).toLocaleString("de-DE")}` +
+      (localStorage.getItem("os_ai_always") === "1" ? " · fragt vor jedem Versand" : "")
+    : "KI-Freigabe noch nicht erteilt — sie wird beim ersten Senden abgefragt.";
+}
+$("cfg_ai_reset").onclick = () => {
+  localStorage.removeItem("os_ai_consent");
+  localStorage.removeItem("os_ai_always");
+  aiConsentState();
+};
+aiConsentState();
+
+// ---- Chat-Panel -----------------------------------------------------------
+const aiHistory = [];          // {role, content} — reiner Gesprächsverlauf
+let aiBusy = false, aiCtrl = null, aiFehlerGezeigt = false;
+
+const aiEsc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+// Sehr kleine Markdown-Teilmenge (fett, code, Aufzählung, Zeilenumbruch).
+function aiMd(s) {
+  return aiEsc(s)
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|\n)\s*[-*]\s+/g, "$1• ")
+    .replace(/\n/g, "<br>");
+}
+
+function aiBubble(cls, html) {
+  const d = document.createElement("div");
+  d.className = "aimsg " + cls;
+  d.innerHTML = html;
+  $("ai_log").appendChild(d);
+  $("ai_log").scrollTop = $("ai_log").scrollHeight;
+  return d;
+}
+function aiHint(text) {
+  const d = document.createElement("div");
+  d.className = "hintline";
+  d.textContent = text;
+  $("ai_log").appendChild(d);
+  $("ai_log").scrollTop = $("ai_log").scrollHeight;
+}
+
+const AI_CHIPS = {
+  table:    ["Was zeigt diese Optionskette?", "Warum fehlen bei manchen Zeilen die Greeks?",
+             "Wie finde ich die Option am Geld?"],
+  surface:  ["Was sagt mir diese IV-Fläche?", "Ist der Smile hier auffällig?",
+             "Wie lese ich die Zeitstruktur der Vola?"],
+  series:   ["Was ist an diesem Verlauf auffällig?", "Wie interpretiere ich diese Metrik?",
+             "Wie wechsle ich die Kennzahl?"],
+  strategy: ["Payoff erklären", "Monte-Carlo-Verteilung deuten", "Wie ist das Risiko strukturiert?",
+             "Wie belastbar ist der Spot?", "Wie lege ich einen Bull-Call-Spread an?"],
+};
+function aiRenderChips() {
+  const list = (AI_CHIPS[view] || AI_CHIPS.table).concat(["Wie bediene ich diese Ansicht?"]);
+  $("ai_chips").innerHTML = list
+    .map(t => `<button type="button" class="aichip">${aiEsc(t)}</button>`).join("");
+  for (const b of $("ai_chips").querySelectorAll(".aichip"))
+    b.onclick = () => { $("ai_text").value = b.textContent; aiSubmit(); };
+}
+
+function aiOpen(on) {
+  $("aidrawer").classList.toggle("open", on);
+  $("ai_toggle").classList.toggle("on", on);
+  document.body.classList.toggle("ai-open", on);
+  // Plotly hört nur auf window-resize: nach der Breitenänderung neu layouten.
+  setTimeout(() => window.dispatchEvent(new Event("resize")), 200);
+  if (on) {
+    aiRenderChips();
+    aiProviderMeta().then(m => {
+      if (m.fehler && !aiFehlerGezeigt) { aiFehlerGezeigt = true; aiHint("⚠ " + m.fehler); }
+    });
+    if (!$("ai_log").children.length)
+      aiHint("Der Assistent sieht nur den Zustand, den du beim Senden mitschickst — " +
+             "und nichts, solange du nichts sendest. „Was wird gesendet?“ zeigt ihn dir.");
+    $("ai_text").focus();
+  }
+}
+$("ai_toggle").onclick = () => aiOpen(!$("aidrawer").classList.contains("open"));
+$("ai_close").onclick = () => aiOpen(false);
+$("ai_clear").onclick = () => { aiHistory.length = 0; $("ai_log").innerHTML = ""; aiOpen(true); };
+$("ai_preview").onclick = async () => aiDialog(buildAiContext(), await aiProviderMeta(), "preview");
+
+$("ai_text").onkeydown = e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); aiSubmit(); }
+};
+$("ai_form").onsubmit = e => { e.preventDefault(); aiSubmit(); };
+$("ai_stop").onclick = () => { if (aiCtrl) aiCtrl.abort(); };
+
+async function aiSubmit() {
+  if (aiBusy) return;                        // kein Parallel-Feuern gegen das Limit
+  const text = $("ai_text").value.trim();
+  if (!text) return;
+
+  // Reihenfolge ist bindend: erst Snapshot, dann Aufklärung, dann erst geht
+  // etwas raus. Bricht der Nutzer ab, verlässt nichts den Browser.
+  const kontext = buildAiContext();
+  const meta = await aiProviderMeta();
+  const erstmalig = !localStorage.getItem("os_ai_consent");
+  if (erstmalig || localStorage.getItem("os_ai_always") === "1") {
+    if (!await aiDialog(kontext, meta, "consent")) return;
+    localStorage.setItem("os_ai_consent", new Date().toISOString());
+    aiConsentState();
+  }
+
+  $("ai_text").value = "";
+  aiBubble("user", aiEsc(text));
+  aiHistory.push({ role: "user", content: text });
+
+  aiBusy = true;
+  $("ai_send").disabled = true;
+  $("ai_stop").classList.remove("hidden");
+  const bubble = aiBubble("bot", '<span class="spinner"></span>');
+  let antwort = "";
+  aiCtrl = new AbortController();
+  try {
+    const res = await fetch(AI_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        system: SYSTEM_PROMPT + "\n\nAKTUELLER ZUSTAND DER SEITE (JSON):\n" +
+                JSON.stringify(kontext),
+        messages: aiHistory,
+        model: aiModel(),        // nur ein Wunsch — der Worker prüft ihn gegen seine Liste
+      }),
+      signal: aiCtrl.signal,
+    });
+    if (!res.ok || !res.body) {
+      const txt = (await res.text().catch(() => "")).slice(0, 300);
+      throw new Error(
+        res.status === 403 ? "Zugriffsschlüssel fehlt oder ist falsch (Einstellungen)."
+        : res.status === 429 ? "Der KI-Dienst ist gerade ausgelastet — kurz warten und erneut senden."
+        : res.status === 500 ? "Der Worker hat keinen KI-Schlüssel hinterlegt. " + txt
+        : `KI-Dienst nicht erreichbar (HTTP ${res.status}). ${txt}`);
+    }
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (payload === "[DONE]") continue;
+        try { antwort += JSON.parse(payload).text ?? ""; } catch { continue; }
+        bubble.innerHTML = aiMd(antwort) + '<span class="cursor">▌</span>';
+        $("ai_log").scrollTop = $("ai_log").scrollHeight;
+      }
+    }
+    if (!antwort.trim()) throw new Error("Der KI-Dienst hat keine Antwort geliefert.");
+    bubble.innerHTML = aiMd(antwort);
+    aiHistory.push({ role: "assistant", content: antwort });
+  } catch (e) {
+    if (e.name === "AbortError") {
+      bubble.innerHTML = antwort ? aiMd(antwort) + '<br><span class="hintline">— abgebrochen</span>'
+                                 : '<span class="hintline">Abgebrochen.</span>';
+      if (antwort.trim()) aiHistory.push({ role: "assistant", content: antwort });
+      else aiHistory.pop();          // ohne Antwort auch die Frage nicht behalten
+    } else {
+      bubble.remove();
+      aiBubble("err", aiEsc(e.message));
+      aiHistory.pop();
+    }
+  } finally {
+    aiBusy = false;
+    aiCtrl = null;
+    $("ai_send").disabled = false;
+    $("ai_stop").classList.add("hidden");
+    $("ai_text").focus();
+  }
+}
+
+// Ansicht gewechselt → passende Vorschlags-Chips. Der Snapshot selbst entsteht
+// weiterhin ausschließlich beim Senden.
+for (const [btn, v] of [["v_table", "table"], ["v_surface", "surface"],
+                        ["v_series", "series"], ["v_strategy", "strategy"]])
+  $(btn).onclick = () => {
+    setView(v);
+    if ($("aidrawer").classList.contains("open")) aiRenderChips();
+  };
 </script>
 </body>
 </html>
