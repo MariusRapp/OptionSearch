@@ -1,489 +1,1087 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" data-tint="purple">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title>OptionSearch</title>
+<meta name="description" content="Historische Optionsketten, IV-Flächen und Strategien (OptionMetrics 1996–2021)">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="OptionSearch">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<!-- gespeichertes Theme vor dem ersten Zeichnen setzen (kein Aufblitzen) -->
+<script>try{const t=localStorage.getItem('theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 <style>
-  /* Dark-only Terminal-Palette. Token-Namen, die das Chart-JS zur Laufzeit
-     liest (--ok/--err/--warn/--accent/--border/--fg/--muted), bleiben erhalten. */
-  :root {
-    --bg: #0d1017; --panel: #151a23; --inset: #1b212c;
-    --border: #262d3a; --border-lit: #333c4d;
-    --fg: #e8ecf2; --secondary: #aab4c2; --muted: #69737f;
-    --accent: #4c9be8; --accent-fg: #08111c; --accent-soft: #16283c;
-    --ok: #3fb950; --err: #ff6b5a; --warn: #e3a008;
-    --row-hover: #1b2431;
-    --sans: -apple-system, "Segoe UI", system-ui, sans-serif;
-    --mono: "Cascadia Mono", "Cascadia Code", ui-monospace, "Consolas", "SFMono-Regular", monospace;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 0 1.5rem 3rem; background: var(--bg); color: var(--fg);
-    font: 15px/1.5 var(--sans);
-    -webkit-font-smoothing: antialiased;
-  }
+/* kit.css:start */
+/* dashboard-kit v1.0.0 (kit/VERSION), copied from Dashboard-hub/kit, do not edit here */
+/* Dashboard-Kit 1.0.0 — the shared look of all dashboards, generalized from BTC-Poly (css/app.css).
+   Source: Dashboard-hub/kit. Copies in the app repos are never edited by hand: change the source, bump kit/VERSION,
+   run `node kit/tools/sync.mjs`. App-specific styles go in the app's own stylesheet, loaded after this one. */
 
-  /* Kopfleiste */
-  .appbar {
-    position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: baseline;
-    gap: 0.9rem; padding: 0.85rem 0 0.7rem; margin-bottom: 1.1rem;
-    background: linear-gradient(var(--bg) 78%, transparent);
-    border-bottom: 1px solid var(--border);
-  }
-  .appbar h1 {
-    font-size: 1.05rem; font-weight: 650; letter-spacing: 0.02em; margin: 0;
-  }
-  .appbar h1 b { color: var(--accent); font-weight: 650; }
-  .appbar .ctx { color: var(--muted); font-size: 0.8rem; }
-  .appbar .grow { flex: 1; }
-  .statuschip {
-    font-size: 0.78rem; color: var(--secondary); display: inline-block;
-    white-space: normal; margin-left: auto; text-align: right;
-  }
-  .statuschip::before {
-    content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-    background: var(--muted); margin-right: 0.45rem; vertical-align: middle;
-  }
-  .statuschip.ok::before  { background: var(--ok); }
-  .statuschip.warn::before { background: var(--warn); }
-  .statuschip.err::before { background: var(--err); }
-  .statuschip.warn { color: var(--warn); } .statuschip.err { color: var(--err); }
-  td.gest { color: var(--warn); }        /* geschätzter Greek (Black-Scholes) */
-  td.gmuted { color: var(--muted); }     /* fehlender Wert (kein Ersatz möglich) */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+[hidden] { display:none !important; }
 
-  /* Panels / Karten */
-  .panel {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 10px; padding: 0.9rem 1rem;
-  }
-  .card {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 10px; padding: 0 1rem 1rem; margin-top: 1rem;
-  }
-  .card-h {
-    display: flex; align-items: center; gap: 0.6rem;
-    font-size: 0.75rem; font-weight: 650; letter-spacing: 0.09em; text-transform: uppercase;
-    color: var(--secondary); padding: 0.7rem 0 0.8rem; margin-bottom: 0.7rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .card-h .idx {
-    font-family: var(--mono); color: var(--accent); font-weight: 700;
-    letter-spacing: 0; font-size: 0.8rem;
-  }
-  .card-h .aside { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+/* ── Tokens: light ──
+   Apple's grouped look: a gray page, white cards, translucent gray fills for controls.
+   Text tokens are all ≥ 4.5:1 on the card, the page and a control fill; up/down are ≥ 3:1 as marks and told apart
+   under red-green color blindness (validated in BTC-Poly). Tints: accent ≥ 3:1 on the card, accent text ≥ 4.5:1 on
+   card, page and the accent wash, text on a filled button ≥ 4.5:1 (kit/README.md lists the values). */
+:root {
+  color-scheme: light;
+  --page:#f2f2f7; --surface:#ffffff; --surface-2:rgba(118,118,128,.12);
+  --ink-1:#1d1d1f; --ink-2:#48484a; --muted:#6c6c70; --muted-text:#6c6c70;
+  --grid:#e5e5ea; --axis:#c7c7cc; --border:rgba(60,60,67,.14); --band:rgba(118,118,128,.07);
+  --up:#2aa846; --up-text:#1c7a34; --up-wash:rgba(42,168,70,.13);
+  --down:#cf1f1f; --down-text:#c4201b; --down-wash:rgba(207,31,31,.10);
+  --warning:#ff9500; --warning-wash:rgba(255,149,0,.20);
+  --accent:#007aff; --accent-text:#0066d6; --accent-track:rgba(0,122,255,.16);
+  --accent-fill:#0071e3; --on-accent:#ffffff;
+  --ex-1:#2a78d6; --ex-2:#eb6834; --ex-3:#1baf7a; --ex-4:#eda100; --ex-5:#e87ba4; --ex-6:#008300;
+  --thumb:#ffffff; --thumb-shadow:0 3px 8px rgba(0,0,0,.12), 0 1px 1px rgba(0,0,0,.05);
+  --switch-off:rgba(120,120,128,.28);
+  --shadow:0 10px 32px rgba(0,0,0,.14), 0 1px 3px rgba(0,0,0,.06);
+  --backdrop:rgba(0,0,0,.28);
+  --hover-filter:brightness(.96);
+  /* the accent as a background behind accent text (tinted buttons, info banners, selected rows) */
+  --wash-pct:12%;
+  --accent-wash:color-mix(in srgb, var(--accent) var(--wash-pct), transparent);
+  /* check mark drawn in --on-accent on --accent-fill */
+  --check-mark:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 8.4 2.7 2.7L12 5.5' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-num: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  /* critically damped: fast out, soft landing, no overshoot */
+  --spring:cubic-bezier(.32,.72,0,1);
+  --gutter:20px; --gap:16px; --pad:18px; --radius:20px; --radius-m:14px; --radius-s:10px; --bar-h:56px;
+}
+/* ── Tints (light): one per app, blue is the default ── */
+:root[data-tint="indigo"] { --accent:#5856d6; --accent-text:#5856d6; --accent-track:rgba(88,86,214,.16); --accent-fill:#5856d6; --on-accent:#ffffff; }
+:root[data-tint="purple"] { --accent:#af52de; --accent-text:#8e3fbd; --accent-track:rgba(175,82,222,.16); --accent-fill:#9844c7; --on-accent:#ffffff; }
+:root[data-tint="teal"]   { --accent:#1593aa; --accent-text:#00778b; --accent-track:rgba(21,147,170,.16); --accent-fill:#00778b; --on-accent:#ffffff; }
+:root[data-tint="orange"] {
+  --accent:#e07800; --accent-text:#a85200; --accent-track:rgba(224,120,0,.16); --accent-fill:#ff9500; --on-accent:#1d1d1f;
+  --check-mark:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 8.4 2.7 2.7L12 5.5' fill='none' stroke='%231d1d1f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
 
-  /* Query-Formular */
-  form.query {
-    display: flex; flex-wrap: wrap; gap: 0.85rem; align-items: flex-end;
+/* ── Tokens: dark (OS setting, unless the viewer picked light) ── */
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page:#000000; --surface:#1c1c1e; --surface-2:rgba(118,118,128,.24);
+    --ink-1:#f5f5f7; --ink-2:#c2c2c7; --muted:#98989d; --muted-text:#98989d;
+    --grid:#2f2f31; --axis:#48484a; --border:rgba(255,255,255,.12); --band:rgba(118,118,128,.14);
+    --up:#30d158; --up-text:#30d158; --up-wash:rgba(48,209,88,.16);
+    --down:#eb4036; --down-text:#ff6961; --down-wash:rgba(235,64,54,.18);
+    --warning:#ff9f0a; --warning-wash:rgba(255,159,10,.22);
+    --accent:#0a84ff; --accent-text:#409cff; --accent-track:rgba(10,132,255,.24);
+    --accent-fill:#0071e3; --on-accent:#ffffff;
+    --ex-1:#3987e5; --ex-2:#d95926; --ex-3:#199e70; --ex-4:#c98500; --ex-5:#d55181; --ex-6:#008300;
+    --thumb:#636366; --thumb-shadow:0 3px 8px rgba(0,0,0,.3), 0 1px 1px rgba(0,0,0,.2);
+    --switch-off:rgba(120,120,128,.36);
+    --shadow:0 10px 32px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08);
+    --backdrop:rgba(0,0,0,.5); --hover-filter:brightness(1.18); --wash-pct:18%;
   }
-  label { display: flex; flex-direction: column; gap: 0.3rem;
-    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-  input, select, button {
-    font: inherit; color: var(--fg); background: var(--inset);
-    border: 1px solid var(--border); border-radius: 6px; padding: 0.45rem 0.6rem;
+  :root[data-tint="indigo"]:where(:not([data-theme="light"])) { --accent:#5e5ce6; --accent-text:#8a88ff; --accent-track:rgba(94,92,230,.28); --accent-fill:#5e5ce6; --on-accent:#ffffff; }
+  :root[data-tint="purple"]:where(:not([data-theme="light"])) { --accent:#bf5af2; --accent-text:#cb7ef5; --accent-track:rgba(191,90,242,.24); --accent-fill:#9844c7; --on-accent:#ffffff; }
+  :root[data-tint="teal"]:where(:not([data-theme="light"]))   { --accent:#40c8e0; --accent-text:#5ad2e8; --accent-track:rgba(64,200,224,.22); --accent-fill:#00778b; --on-accent:#ffffff; }
+  :root[data-tint="orange"]:where(:not([data-theme="light"])) { --accent:#ff9f0a; --accent-text:#ffa733; --accent-track:rgba(255,159,10,.24); --accent-fill:#ff9f0a; --on-accent:#000000; }
+}
+/* ── Tokens: dark (theme toggle) ── */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page:#000000; --surface:#1c1c1e; --surface-2:rgba(118,118,128,.24);
+  --ink-1:#f5f5f7; --ink-2:#c2c2c7; --muted:#98989d; --muted-text:#98989d;
+  --grid:#2f2f31; --axis:#48484a; --border:rgba(255,255,255,.12); --band:rgba(118,118,128,.14);
+  --up:#30d158; --up-text:#30d158; --up-wash:rgba(48,209,88,.16);
+  --down:#eb4036; --down-text:#ff6961; --down-wash:rgba(235,64,54,.18);
+  --warning:#ff9f0a; --warning-wash:rgba(255,159,10,.22);
+  --accent:#0a84ff; --accent-text:#409cff; --accent-track:rgba(10,132,255,.24);
+  --accent-fill:#0071e3; --on-accent:#ffffff;
+  --ex-1:#3987e5; --ex-2:#d95926; --ex-3:#199e70; --ex-4:#c98500; --ex-5:#d55181; --ex-6:#008300;
+  --thumb:#636366; --thumb-shadow:0 3px 8px rgba(0,0,0,.3), 0 1px 1px rgba(0,0,0,.2);
+  --switch-off:rgba(120,120,128,.36);
+  --shadow:0 10px 32px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08);
+  --backdrop:rgba(0,0,0,.5); --hover-filter:brightness(1.18); --wash-pct:18%;
+}
+:root[data-theme="dark"][data-tint="indigo"] { --accent:#5e5ce6; --accent-text:#8a88ff; --accent-track:rgba(94,92,230,.28); --accent-fill:#5e5ce6; --on-accent:#ffffff; }
+:root[data-theme="dark"][data-tint="purple"] { --accent:#bf5af2; --accent-text:#cb7ef5; --accent-track:rgba(191,90,242,.24); --accent-fill:#9844c7; --on-accent:#ffffff; }
+:root[data-theme="dark"][data-tint="teal"]   { --accent:#40c8e0; --accent-text:#5ad2e8; --accent-track:rgba(64,200,224,.22); --accent-fill:#00778b; --on-accent:#ffffff; }
+:root[data-theme="dark"][data-tint="orange"] { --accent:#ff9f0a; --accent-text:#ffa733; --accent-track:rgba(255,159,10,.24); --accent-fill:#ff9f0a; --on-accent:#000000; }
+
+/* ── Base ── */
+html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+body {
+  background:var(--page); color:var(--ink-1); font:15px/1.4 var(--font); min-height:100vh; min-height:100dvh;
+  -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent;
+}
+button, input, select, textarea { font:inherit; color:inherit; }
+a { color:var(--accent-text); text-decoration:none; }
+.num   { font-variant-numeric:tabular-nums; }
+.muted { color:var(--muted-text); }
+.up-t   { color:var(--up-text); }
+.down-t { color:var(--down-text); }
+.accent-t { color:var(--accent-text); }
+.small { font-size:12px; }
+.tiny  { font-size:11px; }
+.mono, code, kbd { font-family:var(--font-mono); font-size:.92em; }
+code { padding:1px 5px; border-radius:5px; background:var(--surface-2); }
+p { line-height:1.45; }
+h1 { font-size:28px; font-weight:700; letter-spacing:-.022em; line-height:1.15; }
+h2 { font-size:17px; font-weight:600; letter-spacing:-.012em; line-height:1.25; }
+h3 { font-size:15px; font-weight:600; letter-spacing:-.008em; line-height:1.3; }
+.large-title { font-size:34px; font-weight:700; letter-spacing:-.025em; line-height:1.12; }
+.sub { font-size:13px; font-weight:600; color:var(--ink-1); }
+.sub .muted { font-weight:400; }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+
+/* every control: answers the press at once, a visible focus ring from the keyboard */
+a, button, select, input, textarea, summary, label { touch-action:manipulation; }
+:focus-visible { outline:3px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset:2px; }
+:focus:not(:focus-visible) { outline:none; }
+
+/* ── Layout ── */
+.wrap {
+  max-width:var(--wrap-max, 1480px); margin:0 auto; display:flex; flex-direction:column; gap:var(--gap);
+  padding:6px max(var(--gutter), env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(var(--gutter), env(safe-area-inset-left));
+}
+.stack { display:flex; flex-direction:column; gap:var(--gap); min-width:0; }
+.grid-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap:var(--gap); align-items:start; }
+.cols { display:grid; grid-template-columns:minmax(0,1fr) 392px; gap:var(--gap); align-items:start; }
+.cols > * { min-width:0; }
+.toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px 16px; flex-wrap:wrap; margin-bottom:8px; }
+.tools { display:flex; align-items:center; gap:8px 14px; flex-wrap:wrap; min-width:0; }
+.spacer { flex:1 1 auto; }
+.footnote { font-size:12px; line-height:1.45; color:var(--muted-text); padding:2px 4px; }
+.footnote a { color:var(--accent-text); }
+
+/* ── Top bar: floats over the page; its material only shows once content scrolls under it (html.scrolled) ── */
+.topbar { position:sticky; top:0; z-index:20; padding-top:env(safe-area-inset-top); }
+.topbar::before {
+  content:''; position:absolute; inset:0 0 -16px 0; z-index:-1; pointer-events:none;
+  background:color-mix(in srgb, var(--page) 76%, transparent);
+  -webkit-backdrop-filter:blur(22px) saturate(180%); backdrop-filter:blur(22px) saturate(180%);
+  /* soft lower edge instead of a divider line */
+  -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+          mask-image:linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+  opacity:0; transition:opacity .2s ease-out;
+}
+.scrolled .topbar::before { opacity:1; }
+.topbar-in {
+  max-width:var(--wrap-max, 1480px); margin:0 auto; min-height:var(--bar-h); display:flex; align-items:center; gap:10px;
+  padding:8px max(var(--gutter), env(safe-area-inset-right)) 8px max(var(--gutter), env(safe-area-inset-left));
+}
+/* optional second row of the bar for controls that stay in reach (fuel type, time range…) */
+.topbar-tools {
+  max-width:var(--wrap-max, 1480px); margin:0 auto; display:flex; align-items:center; flex-wrap:wrap; gap:8px 10px;
+  padding:0 max(var(--gutter), env(safe-area-inset-right)) 10px max(var(--gutter), env(safe-area-inset-left));
+}
+.brand { flex:1; min-width:0; }
+.brand-title { font-size:17px; font-weight:650; letter-spacing:-.015em; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.brand-title .muted { font-weight:400; letter-spacing:0; }
+.brand-sub { font-size:12px; line-height:1.3; color:var(--ink-2); display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; }
+/* second line: a subtitle; once a watched element has scrolled away (html.compact), .brand-live instead */
+.brand-lines { display:grid; }
+.brand-lines > * { grid-area:1 / 1; min-width:0; transition:opacity .22s ease-out, transform .32s var(--spring); }
+.brand-live { font-size:13px; font-weight:600; color:var(--ink-1); font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:0; transform:translateY(6px); align-self:start; }
+.compact .brand-live { opacity:1; transform:none; }
+.compact .brand-lines > :not(.brand-live) { opacity:0; transform:translateY(-6px); }
+.status { display:inline-flex; align-items:center; gap:6px; min-width:0; font-size:12px; font-weight:500; color:var(--ink-2); white-space:nowrap; }
+.status-text { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); flex-shrink:0; }
+.dot.live { background:var(--up); }
+.dot.wait { background:var(--warning); }
+.dot.stale { background:transparent; box-shadow:inset 0 0 0 2px var(--warning); }
+.dot.err  { background:var(--down); }
+.dot.offline { background:transparent; box-shadow:inset 0 0 0 2px var(--muted); }
+.icon-btn {
+  position:relative; width:36px; height:36px; display:grid; place-items:center; flex-shrink:0;
+  border-radius:50%; border:0; background:var(--surface-2); color:var(--ink-2); text-decoration:none;
+  cursor:pointer; transition:transform .1s ease-out, background-color .15s, color .15s;
+}
+.icon-btn::after { content:''; position:absolute; inset:-4px; }   /* 44px to hit */
+.icon-btn:active { transform:scale(.92); }
+.icon-btn[aria-pressed="true"] { color:var(--accent-text); background:var(--accent-track); }
+.icon-btn[aria-pressed="true"] svg { fill:currentColor; }
+.icon-btn:disabled { opacity:.45; cursor:default; }
+.icon-btn.plain { background:transparent; }
+/* back to the hub: the first thing in the bar, hidden by kit.js inside an installed app */
+.hub-btn { margin-left:-2px; }
+
+/* ── Cards ── */
+.card {
+  position:relative; background:var(--surface); border-radius:var(--radius); padding:var(--pad); min-width:0;
+  scroll-margin-top:calc(var(--bar-h) + env(safe-area-inset-top) + 8px);
+}
+.card-head { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 10px; margin-bottom:12px; }
+.card-head > h2 { min-width:0; }
+.card-head.center { align-items:center; }
+.card-meta { font-size:12px; color:var(--muted-text); text-align:right; min-width:0; margin-left:auto; }
+/* edge-to-edge content (lists, maps, tables): no padding; head and .card-pad bring it back */
+.card.flush { padding:0; overflow:hidden; }
+.card.flush > .card-head { padding:var(--pad) var(--pad) 0; }
+.card.flush > .card-pad { padding:0 var(--pad) var(--pad); }
+/* headings outside the cards, iOS grouped style (sentence case) */
+.section-label { font-size:13px; font-weight:500; color:var(--muted-text); margin:4px var(--pad) calc(6px - var(--gap)); }
+.section-title { font-size:22px; font-weight:700; letter-spacing:-.02em; line-height:1.2; margin:10px 2px calc(4px - var(--gap)); }
+/* key-value rows (detail panels, track records) */
+.kv { display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:8px 0; border-top:1px solid var(--grid); font-size:13px; color:var(--ink-2); }
+.kv:first-child { border-top:0; }
+.kv b { font-weight:600; color:var(--ink-1); font-variant-numeric:tabular-nums; text-align:right; }
+
+/* ── Grouped list: rows with icon, title, subtitle, value and chevron; inset separators ── */
+.list { display:flex; flex-direction:column; min-width:0; background:var(--surface); border-radius:var(--radius); overflow:hidden; }
+.list.plain, .card > .list { background:transparent; border-radius:0; overflow:visible; }
+.card:not(.flush) > .list { margin:0 calc(var(--pad) * -1); }
+.row {
+  position:relative; display:grid; grid-template-columns:auto minmax(0,1fr) auto auto;
+  grid-template-areas:"icon title value chev" "icon sub value chev"; align-items:center; row-gap:1px;
+  width:100%; min-height:52px; padding:8px var(--pad); border:0; background:transparent; color:inherit;
+  font:inherit; text-align:left; text-decoration:none;
+}
+a.row, button.row, label.row, .row.click { cursor:pointer; -webkit-user-select:none; user-select:none; transition:background-color .15s; }
+.row-icon {
+  grid-area:icon; width:36px; height:36px; margin-right:12px; display:grid; place-items:center; flex-shrink:0;
+  border-radius:9px; overflow:hidden; background:var(--accent-track); color:var(--accent-text); font-size:18px; line-height:1;
+}
+.row-icon > img { display:block; width:100%; height:100%; object-fit:cover; }
+.row-icon > svg { width:20px; height:20px; }
+.row-icon.plain { background:transparent; }
+.row-title { grid-area:title; align-self:end; min-width:0; font-size:15px; font-weight:500; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.row-sub { grid-area:sub; align-self:start; min-width:0; font-size:12px; line-height:1.35; color:var(--muted-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.row:not(:has(> .row-sub)) > .row-title { grid-row:1 / span 2; align-self:center; }
+/* title and subtitle may also sit in one wrapper */
+.row-text { grid-column:2; grid-row:1 / span 2; display:flex; flex-direction:column; gap:1px; min-width:0; }
+.row-value { grid-area:value; margin-left:12px; text-align:right; font-size:15px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.row-value small { display:block; font-size:12px; font-weight:400; color:var(--muted-text); }
+.row-chev { grid-area:chev; width:8px; height:8px; margin:0 3px 0 14px; border-top:2px solid var(--axis); border-right:2px solid var(--axis); transform:rotate(45deg); }
+.row + .row::before { content:''; position:absolute; top:0; right:0; left:calc(var(--pad) + 48px); border-top:1px solid var(--grid); }
+.row + .row:not(:has(> .row-icon))::before { left:var(--pad); }
+a.row:active, button.row:active, label.row:active, .row.click:active { background:var(--band); }
+.row.sel, .row[aria-selected="true"], .row[aria-current="true"], .row[aria-current="page"] { background:var(--accent-wash); }
+.row.sel .row-title, .row[aria-selected="true"] .row-title { font-weight:600; }
+.row.sel::before, .row[aria-selected="true"]::before, .row.sel + .row::before, .row[aria-selected="true"] + .row::before { opacity:0; }
+
+/* ── Segmented control: a gray well, the choice on a raised thumb.
+      kit.js slides one thumb between the buttons (.seg-live); without it the pressed button is the thumb. ── */
+.seg { --seg-r:7px; position:relative; isolation:isolate; display:inline-flex; gap:2px; padding:2px; max-width:100%; border-radius:9px; background:var(--surface-2); }
+.seg button {
+  position:relative; z-index:1; display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  font:inherit; font-size:13px; font-weight:500; min-width:46px; min-height:28px; padding:4px 13px; white-space:nowrap;
+  color:var(--ink-2); background:transparent; border:0; border-radius:var(--seg-r); cursor:pointer;
+  transition:color .15s, opacity .1s;
+}
+.seg button:active:not(:disabled) { opacity:.55; }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background:var(--thumb); color:var(--ink-1); box-shadow:var(--thumb-shadow); }
+.seg-live button[aria-pressed="true"], .seg-live button[aria-selected="true"],
+.seg:has(> .seg-thumb) button[aria-pressed="true"], .seg:has(> .seg-thumb) button[aria-selected="true"] { background:transparent; box-shadow:none; }
+.seg-thumb {
+  position:absolute; top:0; left:0; z-index:0; width:0; height:0; border-radius:var(--seg-r); pointer-events:none;
+  background:var(--thumb); box-shadow:var(--thumb-shadow);
+  transition:transform .34s var(--spring), width .34s var(--spring), height .34s var(--spring), opacity .15s;
+}
+.seg button:disabled { opacity:.35; cursor:default; }
+.seg.dim { opacity:.45; }
+.seg.sm button { min-width:0; padding:4px 12px; font-size:12px; }
+.seg.lg { --seg-r:9px; padding:3px; border-radius:12px; }
+.seg.lg button { font-size:14px; min-height:34px; padding:6px 16px; gap:7px; }
+.seg.fill { display:flex; width:100%; }
+.seg.fill button { flex:1 1 0; min-width:0; }
+.seg.scroll { overflow-x:auto; scrollbar-width:none; }
+.seg.scroll::-webkit-scrollbar { display:none; }
+
+/* ── Buttons ── */
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:7px 16px;
+  border:0; border-radius:var(--radius-s); background:var(--surface-2); color:var(--ink-1);
+  font:inherit; font-size:15px; font-weight:600; line-height:1.2; text-decoration:none; white-space:nowrap;
+  cursor:pointer; -webkit-user-select:none; user-select:none;
+  transition:transform .1s ease-out, filter .15s, opacity .15s, background-color .15s, color .15s;
+}
+.btn:active:not(:disabled):not([aria-disabled="true"]) { transform:scale(.97); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity:.45; cursor:default; }
+.btn > svg { flex-shrink:0; }
+.btn.primary { background:var(--accent-fill); color:var(--on-accent); }
+.btn.tinted, .btn[aria-pressed="true"] { background:var(--accent-wash); color:var(--accent-text); }
+.btn.danger { background:var(--down-wash); color:var(--down-text); }
+.btn.plain { background:transparent; color:var(--accent-text); padding-left:8px; padding-right:8px; }
+.btn.sm { min-height:30px; padding:5px 12px; gap:5px; font-size:13px; border-radius:8px; }
+.btn.lg { min-height:50px; padding:12px 22px; font-size:17px; border-radius:var(--radius-m); }
+.btn.pill { border-radius:999px; }
+.btn.block { display:flex; width:100%; }
+.btn.busy > svg, .spin { animation:kit-spin .9s linear infinite; }
+/* text button: the tint says "tap me", no underline */
+.link-btn { font:inherit; font-weight:500; color:var(--accent-text); background:none; border:0; cursor:pointer; border-radius:6px; transition:opacity .1s; }
+.link-btn:active { opacity:.5; }
+.link-btn:disabled { opacity:.45; cursor:default; }
+
+/* ── Fields ── */
+.field { display:flex; flex-direction:column; gap:4px; min-width:0; font-size:12px; font-weight:500; color:var(--ink-2); }
+.field.inline { flex-direction:row; align-items:center; gap:8px; }
+.field .hint, .field small { font-size:11px; font-weight:400; line-height:1.35; color:var(--muted-text); }
+/* inputs: a filled well, the tint as a ring while typing */
+.input {
+  min-width:0; min-height:36px; padding:8px 11px; border:0; border-radius:var(--radius-s);
+  background:var(--surface-2); color:var(--ink-1); font:inherit; font-size:15px; font-weight:400; font-variant-numeric:tabular-nums;
+  -webkit-appearance:none; appearance:none; transition:box-shadow .15s;
+}
+.input::placeholder { color:var(--muted-text); opacity:1; }
+.input:focus { outline:none; box-shadow:0 0 0 2px var(--accent); }
+.input:disabled { opacity:.5; }
+.input[aria-invalid="true"] { box-shadow:0 0 0 2px var(--down); }
+.input.sm { min-height:30px; padding:5px 9px; font-size:13px; border-radius:8px; }
+textarea.input { min-height:72px; line-height:1.4; resize:vertical; }
+/* select: native (phones get their own picker), up/down chevrons drawn in CSS */
+.pick { position:relative; display:inline-flex; max-width:100%; }
+.pick select {
+  font:inherit; font-size:13px; font-weight:500; color:var(--ink-1); background:var(--surface-2);
+  border:0; border-radius:9px; min-height:32px; padding:6px 30px 6px 12px; max-width:100%; text-overflow:ellipsis;
+  -webkit-appearance:none; appearance:none; cursor:pointer;
+}
+.pick select:disabled { opacity:.45; cursor:default; }
+.pick::before, .pick::after {
+  content:''; position:absolute; right:12px; width:5px; height:5px; pointer-events:none;
+  border:solid var(--ink-2); border-width:1.5px 0 0 1.5px;
+}
+.pick::before { top:calc(50% - 5px); transform:rotate(45deg); }
+.pick::after  { top:calc(50% + 1px); transform:rotate(225deg); }
+.pick.lg select { font-size:15px; min-height:40px; padding:8px 30px 8px 12px; border-radius:var(--radius-s); }
+.pick.block { display:flex; }
+.pick.block select { width:100%; }
+/* switch (drawn with backgrounds, so every browser shows it) */
+.toggle { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-2); cursor:pointer; -webkit-user-select:none; user-select:none; }
+.toggle:has(input:disabled) { opacity:.45; cursor:default; }
+.toggle input {
+  -webkit-appearance:none; appearance:none; flex-shrink:0; width:36px; height:22px; margin:0; border-radius:999px; cursor:pointer;
+  background:var(--switch-off) radial-gradient(circle at center, #fff 0 8.5px, transparent 9.5px) no-repeat 2px center / 18px 18px;
+  transition:background-color .2s, background-position .28s var(--spring);
+}
+.toggle input:checked { background-color:var(--accent); background-position:16px center; }
+/* round check mark (lists, filters); radios look the same */
+.check { display:inline-flex; align-items:center; gap:8px; font-size:14px; color:var(--ink-1); cursor:pointer; -webkit-user-select:none; user-select:none; }
+.check:has(input:disabled) { opacity:.45; cursor:default; }
+.check > input, input.check {
+  -webkit-appearance:none; appearance:none; flex-shrink:0; width:20px; height:20px; margin:0; border-radius:50%; cursor:pointer;
+  border:1.5px solid var(--axis); background:transparent center / 14px 14px no-repeat;
+  transition:background-color .15s, border-color .15s, transform .1s ease-out;
+}
+.check > input:checked, input.check:checked { border-color:var(--accent-fill); background-color:var(--accent-fill); background-image:var(--check-mark); }
+.check > input:active, input.check:active { transform:scale(.88); }
+.check.square > input { border-radius:6px; }
+/* search field: magnifier in front, the clear button styled */
+.search { position:relative; display:flex; align-items:center; min-width:0; }
+.search::before {
+  content:''; position:absolute; left:11px; top:50%; width:15px; height:15px; margin-top:-7.5px; pointer-events:none; background:var(--muted-text);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='m20 20-4.6-4.6'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='m20 20-4.6-4.6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.search > input {
+  flex:1; width:100%; min-width:0; min-height:36px; padding:8px 10px 8px 34px; border:0; border-radius:var(--radius-s);
+  background:var(--surface-2); color:var(--ink-1); font:inherit; font-size:15px; -webkit-appearance:none; appearance:none; transition:box-shadow .15s;
+}
+.search > input::placeholder { color:var(--muted-text); opacity:1; }
+.search > input:focus { outline:none; box-shadow:0 0 0 2px var(--accent); }
+.search > input:disabled { opacity:.5; }
+.search > input::-webkit-search-decoration { -webkit-appearance:none; }
+.search > input::-webkit-search-cancel-button {
+  -webkit-appearance:none; appearance:none; width:16px; height:16px; margin-left:6px; border-radius:50%; cursor:pointer;
+  background:var(--axis) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m5.5 5.5 5 5m0-5-5 5' stroke='%23fff' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") center / 16px no-repeat;
+}
+.search.lg > input { min-height:46px; padding-left:40px; font-size:17px; border-radius:var(--radius-m); }
+.search.lg::before { left:14px; width:18px; height:18px; margin-top:-9px; }
+
+/* ── Chips and badges ── */
+.chip {
+  display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:999px; white-space:nowrap;
+  font-size:11px; font-weight:600; line-height:1.4; font-variant-numeric:tabular-nums;
+  background:var(--surface-2); color:var(--ink-2);
+}
+.chip.warn   { background:var(--warning-wash); color:var(--ink-1); }
+.chip.up     { background:var(--up-wash); color:var(--up-text); }
+.chip.down   { background:var(--down-wash); color:var(--down-text); }
+.chip.accent { background:var(--accent-wash); color:var(--accent-text); }
+.chip.lg { padding:5px 12px; font-size:13px; font-weight:500; }
+button.chip { border:0; font-family:inherit; cursor:pointer; transition:transform .1s ease-out, background-color .15s, color .15s; }
+button.chip:active { transform:scale(.95); }
+button.chip[aria-pressed="true"] { background:var(--accent-wash); color:var(--accent-text); }
+.badge {
+  display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:6px; vertical-align:1px; white-space:nowrap;
+  font-size:11px; font-weight:700; line-height:1.35; letter-spacing:.01em; background:var(--surface-2); color:var(--ink-2);
+}
+.badge.up     { background:var(--up-wash); color:var(--up-text); }
+.badge.down   { background:var(--down-wash); color:var(--down-text); }
+.badge.warn   { background:var(--warning-wash); color:var(--ink-1); }
+.badge.accent { background:var(--accent-wash); color:var(--accent-text); }
+.badge.solid  { background:var(--ink-1); color:var(--surface); }
+
+/* ── KPI tiles ── */
+.kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap:var(--gap); }
+.kpis.lead { grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr); }   /* a hero tile and two more */
+.kpi { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.kpi-label { font-size:13px; font-weight:500; color:var(--ink-2); }
+.kpi-label .muted { font-weight:400; }
+.hero { font-family:var(--font-num); font-size:56px; font-weight:700; line-height:1.05; letter-spacing:-.028em; font-variant-numeric:tabular-nums; }
+.kpi-value { font-family:var(--font-num); font-size:34px; font-weight:650; line-height:1.1; letter-spacing:-.022em; font-variant-numeric:tabular-nums; }
+.kpi-delta { font-size:15px; font-weight:600; display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
+.kpi-sub { font-size:12px; color:var(--muted-text); margin-top:auto; padding-top:4px; }
+/* small stat tiles on a gray fill */
+.stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(130px, 100%), 1fr)); gap:8px; }
+.stat { display:flex; flex-direction:column; gap:1px; min-width:0; padding:10px 12px; border-radius:12px; background:var(--band); }
+.stat-l { font-size:11px; color:var(--ink-2); }
+.stat-v { font-family:var(--font-num); font-size:19px; font-weight:650; letter-spacing:-.015em; line-height:1.25; font-variant-numeric:tabular-nums; }
+.stat-v small { font-family:var(--font); font-size:11px; font-weight:400; letter-spacing:0; color:var(--muted-text); }
+.stat-s { font-size:11px; color:var(--muted-text); font-variant-numeric:tabular-nums; }
+
+/* thin segmented bar: two parts, 2px surface gap, rounded ends, no text */
+.segbar { display:flex; gap:2px; height:6px; margin:8px 0 2px; }
+.segbar span { flex:1 1 0; border-radius:999px; transition:flex-grow .45s var(--spring), background-color .3s; }
+.segbar .sb-up   { background:var(--up); }
+.segbar .sb-down { background:var(--down); }
+.segbar.idle span { background:var(--grid); }
+.segbar.thin { height:4px; margin:6px 0 4px; }
+/* meter: fill carries severity, track is a lighter step of the same hue */
+.meter { height:6px; border-radius:999px; overflow:hidden; margin:8px 0 2px; background:var(--accent-track); }
+.meter span { display:block; height:100%; width:0; border-radius:999px; background:var(--accent); transition:width .5s linear, background-color .3s; }
+.meter[data-level="good"] { background:var(--up-wash); }
+.meter[data-level="good"] span { background:var(--up); }
+.meter[data-level="warn"] { background:var(--warning-wash); }
+.meter[data-level="warn"] span { background:var(--warning); }
+.meter[data-level="crit"] { background:var(--down-wash); }
+.meter[data-level="crit"] span { background:var(--down); }
+
+/* ── Charts: header with legend, a sized plot box ── */
+.chart-head { display:flex; align-items:baseline; justify-content:space-between; gap:4px 12px; flex-wrap:wrap; margin:14px 0 6px; }
+.chart-head h2, .chart-head h3 { font-size:15px; }
+.legend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--ink-2); }
+.legend > span { display:inline-flex; align-items:center; gap:5px; }
+.lk { display:inline-block; width:14px; height:2px; border-radius:1px; background:var(--ink-1); flex-shrink:0; }
+.lk.dash  { background:repeating-linear-gradient(90deg, var(--ink-2) 0 4px, transparent 4px 7px); }
+.lk.ghost { background:transparent; }
+.lk.accent { background:var(--accent); }
+.lk.thick { height:3px; border-radius:1.5px; }
+.wk { display:inline-block; width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+.wk.up   { background:var(--up);   opacity:.4; }
+.wk.down { background:var(--down); opacity:.4; }
+.wk.band { background:var(--ink-2); opacity:.15; }
+.wk.accent { background:var(--accent); opacity:.4; }
+.plot { position:relative; height:clamp(240px, 40vh, 480px); }
+.plot > canvas, .plot > svg { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:pan-y; }
+.plot > canvas { cursor:crosshair; }
+
+/* ── Tables: row rules, first column left, numbers right ── */
+.table-wrap { max-width:100%; max-height:var(--table-max, none); overflow:auto; -webkit-overflow-scrolling:touch; }
+.table { width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
+.table th, .table td { padding:8px 0 8px 14px; border-top:1px solid var(--grid); text-align:right; font-weight:400; white-space:nowrap; vertical-align:baseline; }
+.table th:first-child, .table td:first-child { text-align:left; padding-left:0; }
+.table thead th { border-top:0; padding-top:0; font-size:11px; font-weight:600; color:var(--muted-text); }
+.table .l { text-align:left; }
+.table .c { text-align:center; }
+.table .wrap-cell { white-space:normal; }
+.table tr.sum td { font-weight:650; color:var(--ink-1); }
+.table.kv td:first-child { color:var(--ink-2); }
+.table.sticky thead th { position:sticky; top:0; z-index:1; padding-top:6px; background:var(--surface); box-shadow:inset 0 -1px 0 var(--grid); }
+/* rows that select something: a little room at both ends for the highlight */
+.table.click tbody tr, .table tbody tr.click { cursor:pointer; transition:background-color .15s; }
+.table.click th:first-child, .table.click td:first-child { padding-left:10px; }
+.table.click th:last-child, .table.click td:last-child { padding-right:10px; }
+.table.click tbody tr:active, .table tbody tr.click:active { background:var(--band); }
+.table tbody tr.sel, .table tbody tr[aria-selected="true"] { background:var(--accent-wash); }
+.table tbody tr.sel td, .table tbody tr[aria-selected="true"] td { border-top-color:transparent; }
+.table tbody tr.sel + tr td, .table tbody tr[aria-selected="true"] + tr td { border-top-color:transparent; }
+
+/* ── Floating layers get the material ── */
+/* tooltip */
+.tip {
+  position:absolute; top:6px; left:0; z-index:5; pointer-events:none; min-width:150px;
+  background:color-mix(in srgb, var(--surface) 80%, transparent);
+  -webkit-backdrop-filter:blur(20px) saturate(180%); backdrop-filter:blur(20px) saturate(180%);
+  border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); padding:8px 11px; font-size:12px;
+}
+.tip.fixed { position:fixed; top:0; z-index:60; max-width:min(280px, calc(100vw - 16px)); }
+.tip-time { color:var(--muted-text); margin-bottom:3px; font-variant-numeric:tabular-nums; }
+.tip-row { display:flex; align-items:center; justify-content:space-between; gap:12px; line-height:1.6; }
+.tip-name { display:inline-flex; align-items:center; gap:6px; color:var(--ink-2); }
+.tip-row b, .tip b { font-weight:600; font-variant-numeric:tabular-nums; }
+/* toast: rises from the bottom edge and leaves the same way */
+.toast {
+  position:fixed; left:50%; bottom:calc(16px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:70;
+  display:flex; flex-direction:column; gap:2px; max-width:calc(100% - 24px); min-width:260px;
+  padding:12px 18px; border-radius:22px; color:var(--ink-1);
+  background:color-mix(in srgb, var(--surface) 78%, transparent);
+  -webkit-backdrop-filter:blur(28px) saturate(180%); backdrop-filter:blur(28px) saturate(180%);
+  border:1px solid var(--border); box-shadow:var(--shadow); font-size:14px;
+  transition:opacity .25s ease-out, transform .4s var(--spring), display .4s allow-discrete;
+}
+.toast b { font-weight:650; }
+.toast span { color:var(--ink-2); font-size:13px; }
+.toast[hidden] { opacity:0; transform:translate(-50%, 24px) scale(.96); }
+@starting-style { .toast:not([hidden]) { opacity:0; transform:translate(-50%, 24px) scale(.96); } }
+/* sheet: a modal <dialog>; a centered card on wide screens, a bottom sheet on phones */
+dialog.sheet {
+  margin:auto; width:min(520px, calc(100% - 32px)); max-width:none; max-height:min(86dvh, 760px); padding:0; border:0;
+  border-radius:22px; background:var(--surface); color:var(--ink-1); box-shadow:var(--shadow);
+  overflow:auto; overscroll-behavior:contain;
+  transition:opacity .2s ease-out, transform .38s var(--spring), overlay .38s allow-discrete, display .38s allow-discrete;
+}
+dialog.sheet:not([open]) { opacity:0; transform:translateY(24px) scale(.98); }
+@starting-style { dialog.sheet[open] { opacity:0; transform:translateY(24px) scale(.98); } }
+dialog.sheet::backdrop {
+  background:var(--backdrop); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);
+  transition:opacity .25s ease-out, overlay .38s allow-discrete, display .38s allow-discrete;
+}
+dialog.sheet:not([open])::backdrop { opacity:0; }
+@starting-style { dialog.sheet[open]::backdrop { opacity:0; } }
+.sheet-head { position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:10px; padding:16px var(--pad) 10px; background:var(--surface); }
+.sheet-head > h2 { flex:1; min-width:0; }
+.sheet-body { display:flex; flex-direction:column; gap:12px; padding:2px var(--pad) var(--pad); }
+.sheet-foot { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; padding:0 var(--pad) calc(var(--pad) + env(safe-area-inset-bottom)); }
+/* popover: a floating menu panel, placed by the app (position the parent relatively) */
+.popover {
+  position:absolute; z-index:30; min-width:220px; max-width:min(360px, calc(100vw - 24px)); max-height:min(420px, 70vh);
+  overflow:auto; padding:6px; border-radius:14px; border:1px solid var(--border); box-shadow:var(--shadow);
+  background:color-mix(in srgb, var(--surface) 86%, transparent);
+  -webkit-backdrop-filter:blur(28px) saturate(180%); backdrop-filter:blur(28px) saturate(180%);
+  transform-origin:top left; transition:opacity .15s ease-out, transform .25s var(--spring), display .25s allow-discrete;
+}
+.popover[hidden] { opacity:0; transform:translateY(-4px) scale(.97); }
+@starting-style { .popover:not([hidden]) { opacity:0; transform:translateY(-4px) scale(.97); } }
+.menu-head { padding:6px 10px 4px; font-size:11px; font-weight:600; color:var(--muted-text); }
+.menu-item {
+  display:flex; align-items:center; gap:10px; width:100%; min-height:36px; padding:7px 10px; border:0; border-radius:9px;
+  background:transparent; color:var(--ink-1); font:inherit; font-size:14px; text-align:left; text-decoration:none; cursor:pointer;
+}
+.menu-item:active { background:var(--surface-2); }
+.menu-item .muted { margin-left:auto; font-size:12px; }
+.menu-sep { height:1px; margin:6px 4px; background:var(--grid); }
+/* drawer: a panel from the right edge (.open), full width on phones */
+.drawer {
+  position:fixed; top:0; right:0; bottom:0; z-index:40; width:min(390px, 100vw); display:flex; flex-direction:column;
+  background:var(--surface); box-shadow:var(--shadow);
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) 0;
+  transform:translateX(100%); visibility:hidden; transition:transform .34s var(--spring), visibility 0s linear .34s;
+}
+.drawer.open { transform:none; visibility:visible; transition:transform .34s var(--spring), visibility 0s; }
+.drawer-head { display:flex; align-items:center; gap:10px; padding:14px var(--pad) 12px; border-bottom:1px solid var(--grid); }
+.drawer-head > h2 { flex:1; min-width:0; }
+.drawer-body { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:var(--pad); }
+.drawer-foot { padding:10px var(--pad) 14px; border-top:1px solid var(--grid); }
+
+/* ── States: empty, notice, loading ── */
+.empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:40px 20px; text-align:center; color:var(--muted-text); }
+.empty-icon { width:44px; height:44px; display:grid; place-items:center; margin-bottom:4px; border-radius:50%; background:var(--surface-2); color:var(--ink-2); font-size:20px; }
+.empty-title { font-size:17px; font-weight:600; color:var(--ink-1); }
+.empty-text { max-width:42ch; font-size:13px; line-height:1.45; }
+.empty .btn { margin-top:8px; }
+.banner { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:12px; font-size:13px; line-height:1.4; background:var(--surface-2); color:var(--ink-1); }
+.banner.info { background:var(--accent-wash); }
+.banner.warn { background:var(--warning-wash); }
+.banner.err  { background:var(--down-wash); }
+.banner b { font-weight:600; }
+.banner > .btn, .banner > .link-btn { margin-left:auto; flex-shrink:0; }
+.skeleton {
+  display:block; min-height:12px; border-radius:8px;
+  background:linear-gradient(90deg, var(--band) 25%, var(--surface-2) 37%, var(--band) 63%) 0 0 / 400% 100%;
+  animation:kit-shimmer 1.4s ease infinite;
+}
+.skeleton.line { height:12px; margin:7px 0; }
+.skeleton.line.short { width:55%; }
+.skeleton.block { height:120px; }
+.spinner { display:inline-block; width:18px; height:18px; flex-shrink:0; vertical-align:middle; border-radius:50%; border:2px solid var(--grid); border-top-color:var(--accent); animation:kit-spin .8s linear infinite; }
+.spinner.lg { width:32px; height:32px; border-width:3px; }
+.progress { height:6px; overflow:hidden; border-radius:999px; background:var(--accent-track); }
+.progress > span { display:block; height:100%; width:0; border-radius:inherit; background:var(--accent); transition:width .2s ease; }
+.progress.indet > span { width:40%; animation:kit-indet 1.2s ease-in-out infinite; }
+@keyframes kit-spin { to { transform:rotate(360deg); } }
+@keyframes kit-shimmer { from { background-position:100% 0; } to { background-position:0 0; } }
+@keyframes kit-indet { from { transform:translateX(-100%); } to { transform:translateX(250%); } }
+
+/* ── Folding (kit.js initFold): a chevron in every card's corner; folded = the title row, a KPI tile = label and number ── */
+.fold {
+  position:absolute; top:13px; right:12px; z-index:3; width:28px; height:28px; padding:0; display:grid; place-items:center;
+  border:0; border-radius:50%; background:transparent; color:var(--muted-text); cursor:pointer;
+  transition:transform .1s ease-out, background-color .15s, color .15s;
+}
+.fold::after { content:''; position:absolute; inset:-8px; }   /* 44px to hit */
+.fold:active { transform:scale(.88); background:var(--surface-2); }
+.fold svg { transition:transform .34s var(--spring); }
+.folded > .fold svg { transform:rotate(180deg); }
+.foldable > .card-head, .foldable > .toolbar { padding-right:32px; }
+.foldable > .card-head > h2, .foldable.kpi > .kpi-label { cursor:pointer; -webkit-user-select:none; user-select:none; }
+.fold-head { display:none; }
+.card.folded > .fold-head { display:flex; }
+.card.folded:not(.kpi) > :not(.card-head):not(.fold) { display:none !important; }
+.card.folded > .card-head { margin-bottom:0 !important; }
+.card.folded > .card-head > :not(h2):not(.card-meta) { display:none; }
+.card:not(.folded) > .fold:has(+ .fold-head + .toolbar) { top:20px; }   /* level with a toolbar that opens the card */
+.kpi > .fold { top:11px; right:10px; width:26px; height:26px; }
+.foldable.kpi > .kpi-label { padding-right:26px; }
+.kpi.folded > :not(.kpi-label):not(.fold):not(.hero):not(.kpi-value) { display:none !important; }
+.kpi.folded .hero { font-size:34px; }
+
+/* ── Tablet ── */
+@media (max-width: 980px) {
+  .cols { grid-template-columns:minmax(0,1fr); }
+  .hero { font-size:48px; }
+}
+/* ── Phone ── */
+@media (max-width: 640px) {
+  :root { --gutter:12px; --gap:12px; --pad:14px; --radius:18px; --bar-h:64px; }
+  /* the subtitle gets a line of its own under the title and the buttons */
+  .topbar-in { flex-wrap:wrap; gap:2px 8px; padding-top:6px; padding-bottom:6px; }
+  .brand { display:contents; }
+  .brand-title { flex:1; min-width:0; font-size:16px; }
+  .brand-lines, .brand > .brand-sub { order:9; flex:1 1 100%; }
+  .status { font-size:11px; gap:5px; }
+  .kpis, .kpis.lead { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .kpis > .kpi-hero, .kpis > .wide { grid-column:1 / -1; }
+  .hero { font-size:clamp(38px, 12.2vw, 46px); }
+  .kpi-value { font-size:28px; }
+  .kpi-label { font-size:12px; }
+  .seg button { min-width:0; padding:4px 10px; }
+  .seg.sm button { padding:4px 10px; }
+  .seg.lg button { padding:6px 12px; font-size:13px; }
+  h1 { font-size:26px; }
+  .large-title { font-size:30px; }
+  h2 { font-size:16px; }
+  .hide-sm { display:none !important; }
+  .plot { height:280px; }
+  .toast { left:12px; right:12px; max-width:none; min-width:0; transform:none; }
+  .toast[hidden] { transform:translateY(24px) scale(.96); }
+  @starting-style { .toast:not([hidden]) { transform:translateY(24px) scale(.96); } }
+  dialog.sheet { width:100%; max-height:92dvh; margin:auto 0 0; border-radius:22px 22px 0 0; }
+  dialog.sheet::before { content:''; display:block; width:36px; height:5px; margin:8px auto 0; border-radius:3px; background:var(--axis); }
+  dialog.sheet:not([open]) { transform:translateY(100%); }
+  @starting-style { dialog.sheet[open] { transform:translateY(100%); } }
+  .fold { top:9px; right:8px; }
+  .card:not(.folded) > .fold:has(+ .fold-head + .toolbar) { top:16px; }
+  .kpi > .fold { top:7px; right:6px; }
+  .kpi.folded .hero { font-size:28px; }
+}
+@media (min-width: 641px) { .show-sm { display:none !important; } }
+
+/* fingers: taller controls (44px for buttons and fields), 16px text in fields so iOS does not zoom in */
+@media (pointer: coarse) {
+  .seg button { min-height:34px; }
+  .seg.lg button { min-height:38px; }
+  .pick select { min-height:36px; font-size:16px; }
+  .pick.lg select { min-height:44px; }
+  .btn { min-height:44px; }
+  .btn.sm { min-height:36px; }
+  .input, .search > input { min-height:44px; font-size:16px; }
+  .input.sm { min-height:36px; }
+  .link-btn { padding:6px 4px; margin:-6px -4px; }
+  .toggle, .check { min-height:32px; }
+  .row { min-height:56px; }
+  .menu-item { min-height:44px; }
+}
+/* a mouse gets hover states; a finger would leave them stuck */
+@media (hover: hover) {
+  .icon-btn:hover { color:var(--ink-1); }
+  .icon-btn[aria-pressed="true"]:hover { color:var(--accent-text); }
+  .seg button:hover:not(:disabled) { color:var(--ink-1); }
+  .btn:hover:not(:disabled):not([aria-disabled="true"]) { filter:var(--hover-filter); }
+  .link-btn:hover:not(:disabled) { text-decoration:underline; }
+  a.row:hover, button.row:hover, label.row:hover, .row.click:hover { background:var(--band); }
+  .table.click tbody tr:hover, .table tbody tr.click:hover { background:var(--band); }
+  .table.click tbody tr.sel:hover, .table.click tbody tr[aria-selected="true"]:hover { background:var(--accent-wash); }
+  .menu-item:hover { background:var(--surface-2); }
+  button.chip:hover { filter:var(--hover-filter); }
+  .fold:hover { color:var(--ink-1); background:var(--surface-2); }
+}
+
+/* ── The viewer's system settings ── */
+/* less motion: nothing slides, spins fast or scales; state changes still fade */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation:none !important; scroll-behavior:auto !important; }
+  .spinner, .spin, .btn.busy > svg { animation:kit-spin 1.6s linear infinite !important; }
+  .progress.indet > span { width:100%; opacity:.5; }
+  .seg-thumb, .fold svg, .segbar span, .meter span, .progress > span, .toggle input, .check > input, input.check { transition:none; }
+  .brand-lines > * { transition:opacity .22s ease-out; }
+  .toast { transition:opacity .25s ease-out, display .4s allow-discrete; }
+  .popover { transition:opacity .15s ease-out, display .25s allow-discrete; }
+  dialog.sheet, dialog.sheet::backdrop { transition:opacity .2s ease-out, overlay .2s allow-discrete, display .2s allow-discrete; }
+  .drawer, .drawer.open { transition:visibility 0s; }
+  .brand-live, .compact .brand-lines > :not(.brand-live) { transform:none; }
+  .toast[hidden] { transform:translateX(-50%); }
+  dialog.sheet:not([open]), .popover[hidden] { transform:none; }
+  .icon-btn:active, .btn:active:not(:disabled):not([aria-disabled="true"]), button.chip:active, .fold:active,
+  .check > input:active, input.check:active { transform:none; }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 640px) {
+  .toast[hidden], dialog.sheet:not([open]) { transform:none; }
+}
+/* less transparency: the floating layers turn solid */
+@media (prefers-reduced-transparency: reduce) {
+  .topbar::before { background:var(--page); -webkit-backdrop-filter:none; backdrop-filter:none; -webkit-mask-image:none; mask-image:none; bottom:0; border-bottom:1px solid var(--grid); }
+  .tip, .toast, .popover { background:var(--surface); -webkit-backdrop-filter:none; backdrop-filter:none; }
+  dialog.sheet::backdrop { -webkit-backdrop-filter:none; backdrop-filter:none; }
+}
+/* more contrast: solid layers and an outline on every surface and control */
+@media (prefers-contrast: more) {
+  :root, :root[data-theme] { --border:color-mix(in srgb, var(--ink-1) 55%, transparent); --grid:var(--axis); }
+  .card, .list, .seg, .pick select, .input, .search > input, .btn, .icon-btn, .stat, .chip, .badge, .banner, .popover, dialog.sheet, .drawer {
+    outline:1px solid var(--border); outline-offset:-1px;
   }
-  input, select { font-family: var(--sans); }
-  input[type=number], input#secid { font-family: var(--mono); }
-  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  select { cursor: pointer; }
-  button { cursor: pointer; }
-  button.primary {
-    background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
-    font-weight: 650; padding: 0.45rem 1.3rem;
-  }
-  button.primary:hover { filter: brightness(1.08); }
-  button.primary:disabled { opacity: 0.4; cursor: default; filter: none; }
-  button.ghost {
-    background: transparent; color: var(--secondary); border-color: var(--border);
-  }
-  button.ghost:hover { border-color: var(--border-lit); color: var(--fg); background: var(--inset); }
-  .iconbtn { padding: 0.4rem 0.55rem; line-height: 1; color: var(--secondary); }
+  .topbar::before { background:var(--page); -webkit-backdrop-filter:none; backdrop-filter:none; -webkit-mask-image:none; mask-image:none; bottom:0; border-bottom:1px solid var(--border); }
+  .tip, .toast, .popover { background:var(--surface); -webkit-backdrop-filter:none; backdrop-filter:none; }
+}
+/* kit.css:end */
+</style>
+<style>
+  /* ---- OptionSearch: App-Stile (nach dem Kit; Kit-Kopie oben nie von Hand ändern) ----
+     Farben nur aus Kit-Tokens. Einzige Ergänzung: --warn-text = Warnfarbe als Text
+     (geschätzte Werte: ≈ + Warnfarbe + „geschätzt“); --warning selbst ist hell zu blass für Text. */
+  :root { --warn-text: #a35200; }
+  @media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --warn-text: var(--warning); } }
+  :root[data-theme="dark"] { --warn-text: var(--warning); }
 
-  /* Kontextleiste: Chips zur aktuellen Auswahl */
-  #secinfo, #spotinfo, #rowcount { font-family: var(--mono); }
-  .ctxbar {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
-    margin: 0.9rem 0 0.2rem; min-height: 1.6rem;
-  }
-  .chip {
-    display: inline-flex; align-items: baseline; gap: 0.4rem;
-    background: var(--inset); border: 1px solid var(--border); border-left: 3px solid var(--border-lit);
-    border-radius: 6px; padding: 0.28rem 0.6rem; font-size: 0.82rem; color: var(--secondary);
-    font-family: var(--mono);
-  }
-  #spotinfo.chip { border-left-color: var(--ok); color: var(--fg); font-weight: 600; }
-  #spotinfo.chip.est { border-left-color: var(--warn); color: var(--warn); }
-  #secinfo:empty, #spotinfo:empty, #rowcount:empty { display: none; }
-
-  /* Segmentierte View-Tabs */
-  .seg { display: inline-flex; gap: 0.15rem; background: var(--inset);
-    border: 1px solid var(--border); border-radius: 8px; padding: 0.2rem; }
-  .vbtn {
-    background: transparent; border: none; border-radius: 6px; color: var(--muted);
-    font-weight: 600; font-size: 0.86rem; padding: 0.4rem 0.9rem;
-  }
-  .vbtn:hover { color: var(--fg); background: transparent; }
-  .vbtn.active { background: var(--accent-soft); color: var(--accent); }
-
-  /* Werkzeugleiste (Filter + Aktionen) */
-  .toolbar { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: center; margin: 0.9rem 0; }
-  .toolbar .spacer { flex: 1; }
-  .toolbar label { flex-direction: row; align-items: center; gap: 0.4rem; }
-  .subhead { font-size: 0.72rem; font-weight: 650; letter-spacing: 0.09em;
-    text-transform: uppercase; color: var(--secondary); }
-
-  /* Tabellen */
-  .tablewrap { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: 8px; }
-  table { border-collapse: collapse; width: 100%; font-size: 0.82rem;
-    font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  th, td { padding: 0.32rem 0.7rem; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
-  th { font-family: var(--sans); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
-    text-transform: uppercase; color: var(--muted); }
-  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
-  thead th { position: sticky; top: 0; background: var(--panel); cursor: default; z-index: 1;
-    border-bottom: 1px solid var(--border-lit); }
-  tbody tr:hover { background: var(--row-hover); }
-
-  /* Kennzahl-Kacheln (Signature: Readout-Zelle mit linker Zustandsleiste) */
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 0.6rem; margin: 0.2rem 0 0.4rem; }
-  .tile {
-    background: var(--inset); border: 1px solid var(--border); border-left: 3px solid var(--border-lit);
-    border-radius: 7px; padding: 0.55rem 0.7rem; display: flex; flex-direction: column; gap: 0.2rem;
-    animation: tick 0.15s ease-out;
-  }
-  .tile .k { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-  .tile .v { font-family: var(--mono); font-size: 1.15rem; font-weight: 600; color: var(--fg); letter-spacing: -0.01em; line-height: 1.1; }
-  .tile .v .u { font-size: 0.72rem; font-weight: 400; color: var(--muted); margin-left: 0.25rem; letter-spacing: 0; }
-  .tile[data-state=pos] { border-left-color: var(--ok); }
-  .tile[data-state=pos] .v { color: var(--ok); }
-  .tile[data-state=neg] { border-left-color: var(--err); }
-  .tile[data-state=neg] .v { color: var(--err); }
-  .tile[data-state=warn] { border-left-color: var(--warn); }
-  .tile[data-state=accent] { border-left-color: var(--accent); }
-  .tiles.greeks { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
-  .tiles.greeks .tile .v { font-size: 0.98rem; }
-
-  /* Hero-Zahl (eine pro Karte, z. B. realisiertes P&L) */
-  .hero {
-    display: flex; flex-direction: column; gap: 0.15rem; padding: 0.3rem 0 0.6rem;
-  }
-  .hero .k { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
-  .hero .v { font-family: var(--mono); font-size: 2.5rem; font-weight: 650; line-height: 1; letter-spacing: -0.02em; }
-  .hero .v.pos { color: var(--ok); } .hero .v.neg { color: var(--err); }
-  .hero .sub { font-size: 0.8rem; color: var(--muted); }
-  .hero .sub .warn { color: var(--warn); }
-
-  /* Leerzustand */
-  .empty {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 0.5rem; text-align: center; color: var(--muted);
-    border: 1px dashed var(--border); border-radius: 10px; padding: 3.5rem 1.5rem; margin-top: 1rem;
-  }
-  .empty .big { font-size: 1.05rem; color: var(--secondary); font-weight: 600; }
-  .empty .mono { font-family: var(--mono); font-size: 0.85rem; }
-
-  /* Charts */
-  .chart, #surface, #serieschart, #payoffchart, #realizedchart, #mcchart {
-    border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
-  }
-  #surface { height: 70vh; }
-  #serieschart { height: 60vh; }
-  #payoffchart { height: 45vh; }
-  #realizedchart { height: 32vh; margin-bottom: 0.3rem; }
-  #mcchart { height: 40vh; margin-top: 0.3rem; }
-
-  /* Kleintext / Fortschritt / Hinweise */
-  #g_hint, #s_prog { font-size: 0.83rem; color: var(--muted); }
-  #g_hint { display: block; margin: 0.15rem 0 0.3rem; }
-  #g_hint:empty { margin: 0; }
-  #g_hint.warn { color: var(--warn); }
-  #g_stats, #mc_out, #r_out { display: block; margin-top: 0.7rem; font-size: 0.83rem; color: var(--muted); }
-  #g_stats:empty, #mc_out:empty, #r_out:empty { margin: 0; }
-  .note-warn { color: var(--warn); }
-
-  /* Ladeanzeige: Spinner, Fortschrittsbalken, Chart-Overlay */
-  #s_loading { display: inline-flex; align-items: center; gap: 0.5rem; }
-  .spinner { width: 14px; height: 14px; border: 2px solid var(--border-lit);
-    border-top-color: var(--accent); border-radius: 50%; display: inline-block;
-    vertical-align: middle; animation: spin 0.7s linear infinite; flex: none; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
-  .progress { display: inline-block; width: 150px; height: 6px; vertical-align: middle;
-    background: var(--inset); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-  .progress > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s ease; }
-  .chartbox { position: relative; }
-  .overlay { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center;
-    justify-content: center; gap: 0.6rem; border-radius: 8px;
-    background: rgba(13, 16, 23, 0.66); color: var(--secondary); font-size: 0.9rem; }
-
-  details { margin-top: 1.6rem; font-size: 0.85rem; color: var(--muted); }
-  details summary { cursor: pointer; }
-  details .row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.6rem; }
-  details input { width: 320px; max-width: 100%; }
   .hidden { display: none !important; }
+  .icon-btn[hidden] { display: none; }
+  .icon-btn svg { display: block; }
+  .warn-t { color: var(--warn-text); }
+  .toolbar.start { justify-content: flex-start; align-items: flex-end; gap: 10px 14px; }
+  .toolbar.start .spacer { flex: 1 1 0; }
+  p { line-height: 1.45; }
 
-  @keyframes tick { from { opacity: 0.55; } to { opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .tile { animation: none; } }
+  /* Kopfleiste: lange Statustexte kürzen; am Handy eigene Zeile */
+  .topbar .status { max-width: 46%; }
+  @media (max-width: 640px) {
+    .topbar .status { order: 10; flex: 1 1 100%; max-width: none; padding: 0 2px 2px; }
+  }
 
-  /* ---- KI-Assistent: andockbarer Drawer rechts ---------------------------
-     Er überlagert nichts: der Body bekommt rechts Platz, und nach dem Öffnen
-     wird ein resize-Event ausgelöst, damit Plotly neu layoutet. */
-  #ai_toggle { font-size: 0.8rem; padding: 0.3rem 0.7rem; }
-  #ai_toggle.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-  .aidrawer {
-    position: fixed; inset: 0 0 0 auto; z-index: 40;
-    width: 390px; max-width: 100vw; display: flex; flex-direction: column;
-    background: var(--panel); border-left: 1px solid var(--border);
-    transform: translateX(100%); transition: transform 0.18s ease, visibility 0.18s;
-    visibility: hidden;   /* geschlossen: nicht per Tab erreichbar */
+  /* Abfrage */
+  .query { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
+  .datepick { display: flex; align-items: center; gap: 6px; min-height: 36px; }
+  .datepick .icon-btn { width: 32px; height: 32px; }
+  .datepick .icon-btn::after { inset: -6px; }
+  #ticker { width: 8rem; text-transform: uppercase; }
+  #ticker::placeholder { text-transform: none; }
+  #secid { width: 10rem; font-family: var(--font-mono); }
+  #secid::placeholder { font-family: var(--font); }
+  .query-actions { display: flex; gap: 8px; }
+  #secinfo { flex: 1 1 100%; font-size: 12px; color: var(--muted-text); font-variant-numeric: tabular-nums; }
+  #secinfo:empty { display: none; }
+
+  /* Ansicht + Filter */
+  #viewcard > .toolbar { margin-bottom: 12px; }
+  #spotinfo { font-size: 13px; font-weight: 500; padding: 4px 11px; }
+  #spotinfo.est { background: var(--warning-wash); color: var(--warn-text); }
+  #spotinfo:empty, #rowcount:empty { display: none; }
+  #rowcount { font-size: 12px; padding: 3px 10px; }
+
+  /* Tabellen: erste zwei Spalten links, IDs in Mono */
+  #tbl th:nth-child(2), #tbl td:nth-child(2),
+  #g_legs th:nth-child(2), #g_legs td:nth-child(2),
+  #r_legs th:nth-child(2), #r_legs td:nth-child(2) { text-align: left; }
+  #tbl td:last-child { font-family: var(--font-mono); font-size: 12px; }
+  #tblwrap { --table-max: 70vh; }
+  @media (hover: hover) { .table.hover tbody tr:hover { background: var(--band); } }
+  td.gest { color: var(--warn-text); }        /* geschätzter Greek (Black-Scholes) */
+  td.gmuted { color: var(--muted-text); }     /* fehlender Wert (kein Ersatz möglich) */
+  .legbtns { display: inline-flex; gap: 6px; vertical-align: middle; }
+  .legbtns .icon-btn { width: 30px; height: 30px; font-size: 15px; line-height: 1; }
+  .legbtns .icon-btn::after { inset: -5px -3px; }
+
+  /* Charts (Plotly) */
+  #surface { height: 70vh; min-height: 360px; }
+  #serieschart { height: 60vh; min-height: 320px; }
+  #payoffchart { height: 45vh; min-height: 300px; margin-top: 12px; }
+  #realizedchart { height: 32vh; min-height: 240px; margin-top: 8px; }
+  #mcchart { height: 40vh; min-height: 280px; margin-top: 8px; }
+  .plot-msg { padding: 16px 2px; font-size: 13px; color: var(--muted-text); }
+  .plot-msg.err { color: var(--down-text); }
+  .chartbox { position: relative; }
+  .overlay {
+    position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+    gap: 10px; padding: 16px; text-align: center; border-radius: var(--radius-m);
+    background: color-mix(in srgb, var(--surface) 72%, transparent); color: var(--ink-2); font-size: 14px;
   }
-  .aidrawer.open { transform: none; visibility: visible; }
-  body.ai-open { padding-right: calc(390px + 1.5rem); }
-  @media (max-width: 900px) {
-    .aidrawer { width: 100vw; }
-    body.ai-open { padding-right: 1.5rem; }
-  }
-  @media (prefers-reduced-motion: reduce) { .aidrawer { transition: none; } }
-  .aidrawer > header {
-    display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 0.9rem;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.75rem; font-weight: 650; letter-spacing: 0.09em; text-transform: uppercase;
-    color: var(--secondary);
-  }
-  .aidrawer > header .grow { flex: 1; }
-  .aidrawer > header .who { font-size: 0.68rem; letter-spacing: 0; text-transform: none;
-    color: var(--muted); font-family: var(--mono); }
-  select.aimodel { font-size: 0.72rem; padding: 0.15rem 0.35rem; letter-spacing: 0;
-    text-transform: none; font-weight: 400; color: var(--secondary); }
-  #ai_chips { display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0.6rem 0.9rem 0;
-    border-bottom: 1px solid var(--border); padding-bottom: 0.6rem; }
-  .aichip {
-    background: var(--inset); border: 1px solid var(--border); color: var(--secondary);
-    border-radius: 999px; padding: 0.25rem 0.65rem; font-size: 0.76rem; cursor: pointer;
-  }
-  .aichip:hover { border-color: var(--accent); color: var(--accent); }
-  #ai_log { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 0.55rem;
-    padding: 0.8rem 0.9rem; }
-  .aimsg { border-radius: 8px; padding: 0.5rem 0.7rem; font-size: 0.87rem; line-height: 1.5;
-    border: 1px solid var(--border); overflow-wrap: anywhere; }
-  .aimsg.user { background: var(--accent-soft); color: var(--fg); margin-left: 1.4rem; }
-  .aimsg.bot { background: var(--inset); border-left: 3px solid var(--accent); color: var(--fg); }
-  .aimsg.err { background: var(--inset); border-left: 3px solid var(--err); color: var(--err); }
-  .aimsg code { font-family: var(--mono); font-size: 0.85em; background: var(--bg);
-    padding: 0 0.25rem; border-radius: 3px; }
+
+  /* Zeitreihe: Laden */
+  #s_loading { display: inline-flex; align-items: center; gap: 8px; align-self: center; }
+  #s_loading .progress { display: block; width: 150px; }
+  #s_prog { align-self: center; font-size: 13px; color: var(--muted-text); }
+  #s_prog:empty { display: none; }
+
+  /* Strategie-Karten */
+  .card-head h2 { display: flex; align-items: center; gap: 8px; }
+  .step { min-width: 22px; justify-content: center; font-size: 12px; }
+  #g_name { font-size: 13px; color: var(--ink-2); }
+  .card > .toolbar.start + .toolbar.start { margin-top: 4px; }
+  #g_hint { display: block; margin: 2px 0 8px; font-size: 13px; color: var(--muted-text); }
+  #g_hint:empty { margin: 0; }
+  #g_hint.warn { color: var(--warn-text); }
+  #g_legwrap { --table-max: 30vh; margin-top: 4px; }
+  #r_legwrap { --table-max: 22vh; margin-top: 12px; }
+  #g_stats, #mc_out, #r_out { display: block; margin-top: 12px; font-size: 13px; color: var(--muted-text); }
+  #g_stats:empty, #mc_out:empty, #r_out:empty { margin: 0; }
+  .stats + .stats { margin-top: 8px; }
+  .stats.greeks { grid-template-columns: repeat(auto-fit, minmax(min(96px, 100%), 1fr)); }
+  .stats.greeks .stat-v { font-size: 16px; }
+  .stat-v { color: var(--ink-1); overflow-wrap: anywhere; }
+  .stat[data-state=pos] .stat-v { color: var(--up-text); }
+  .stat[data-state=neg] .stat-v { color: var(--down-text); }
+  .stat[data-state=warn] .stat-v { color: var(--warn-text); }
+  .stat[data-state=accent] .stat-v { color: var(--accent-text); }
+  .note-warn { margin-top: 8px; font-size: 13px; line-height: 1.45; color: var(--warn-text); }
+  .realized { margin-bottom: 12px; }
+  .realized .kpi-sub { margin-top: 2px; }
+
+  /* Status-Hinweis unter der Abfrage (Fehler/Warnung in voller Länge) */
+  #statusmsg .link-btn { font-size: 13px; }
+
+  /* KI-Assistent: Kit-Drawer, rechts angedockt (Inhalt rückt zur Seite), schmal = volle Breite */
+  @media (min-width: 901px) { body.ai-open { padding-right: 390px; } }
+  @media (max-width: 900px) { #aidrawer { width: 100vw; } }
+  #aidrawer .drawer-head { flex-wrap: wrap; }
+  #aidrawer .drawer-head h2 { flex: 0 1 auto; }
+  #ai_who { flex: 1; min-width: 0; font-size: 12px; color: var(--muted-text); }
+  .pick:has(> select.hidden) { display: none; }
+  .ai-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px var(--pad); border-bottom: 1px solid var(--grid); }
+  .ai-chips:empty { display: none; }
+  .ai-chips .chip { white-space: normal; text-align: left; }
+  #ai_log { display: flex; flex-direction: column; gap: 10px; }
+  .aimsg { border-radius: 14px; padding: 9px 12px; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+  .aimsg.user { align-self: flex-end; max-width: 88%; background: var(--accent-wash); color: var(--ink-1); }
+  .aimsg.bot { background: var(--surface-2); color: var(--ink-1); }
+  .aimsg.err { background: var(--down-wash); color: var(--down-text); }
+  .aimsg code { padding: 0 4px; border-radius: 4px; background: var(--surface); }
   .aimsg .cursor { color: var(--accent); }
-  #ai_log .hintline { color: var(--muted); font-size: 0.8rem; }
-  .aidrawer > footer { border-top: 1px solid var(--border); padding: 0.6rem 0.9rem 0.8rem; }
-  #ai_form { display: flex; gap: 0.5rem; align-items: flex-end; }
-  #ai_text { flex: 1; resize: none; min-height: 2.4rem; max-height: 8rem; font-family: var(--sans);
-    font-size: 0.87rem; }
-  .aifoot { display: flex; gap: 0.7rem; margin-top: 0.5rem; font-size: 0.74rem; color: var(--muted); }
-  .aifoot button { background: none; border: none; padding: 0; color: var(--muted);
-    text-decoration: underline; font-size: 0.74rem; }
-  .aifoot button:hover { color: var(--accent); }
+  .hintline { font-size: 13px; color: var(--muted-text); }
+  #ai_form { display: flex; gap: 8px; align-items: flex-end; }
+  #ai_text { flex: 1; min-height: 44px; max-height: 8rem; resize: none; }
+  .aifoot { display: flex; gap: 16px; margin-top: 8px; }
+  .aifoot .link-btn { font-size: 13px; }
 
-  /* Aufklärungs-/Vorschau-Dialog */
-  dialog.aidlg {
-    background: var(--panel); color: var(--fg); border: 1px solid var(--border-lit);
-    border-radius: 10px; padding: 1.1rem 1.2rem; width: min(660px, calc(100vw - 3rem));
-    font: 15px/1.55 var(--sans);
+  /* Sheets: Aufklärungsdialog (breiter, JSON-Vorschau) und Einstellungen */
+  @media (min-width: 641px) { #ai_dlg { width: min(660px, calc(100% - 32px)); } }
+  #ai_dlg_p { font-size: 14px; color: var(--ink-2); }
+  #ai_dlg_json {
+    max-height: 42vh; overflow: auto; padding: 10px 12px; border-radius: var(--radius-s);
+    background: var(--surface-2); color: var(--ink-2); font-family: var(--font-mono); font-size: 12px;
+    white-space: pre-wrap; word-break: break-word;
   }
-  dialog.aidlg::backdrop { background: rgba(5, 8, 13, 0.6); }
-  dialog.aidlg h2 { font-size: 1rem; margin: 0 0 0.6rem; }
-  dialog.aidlg p { font-size: 0.87rem; color: var(--secondary); margin: 0 0 0.7rem; }
-  dialog.aidlg pre { max-height: 42vh; overflow: auto; background: var(--inset);
-    border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.7rem;
-    font-family: var(--mono); font-size: 0.76rem; white-space: pre-wrap; word-break: break-word;
-    color: var(--secondary); }
-  dialog.aidlg .dlgrow { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.9rem; }
-  dialog.aidlg .dlgrow .grow { flex: 1; }
-  dialog.aidlg label.inline { flex-direction: row; align-items: center; gap: 0.4rem;
-    text-transform: none; letter-spacing: 0; font-size: 0.8rem; color: var(--secondary); }
+  .cfg-ai { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  #cfg_ai_state { font-size: 12px; color: var(--muted-text); }
 </style>
 </head>
 <body>
-<div class="appbar">
-  <h1><b>Option</b>Search</h1>
-  <span class="ctx">Optionsketten &middot; IV-Fl&auml;chen &middot; Strategien &middot; OptionMetrics&nbsp;1996&ndash;2021</span>
-  <span class="grow"></span>
-  <button type="button" class="ghost" id="ai_toggle"
-          title="KI-Assistent: erkl&auml;rt Bedienung und interpretiert die aktuelle Ansicht">&#129302; Assistent</button>
-  <span id="status" class="statuschip">Initialisiere &hellip;</span>
-</div>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="icon-btn hub-btn" data-kit="hub"></a>
+    <div class="brand">
+      <h1 class="brand-title">OptionSearch</h1>
+      <div class="brand-sub hide-sm">Optionsketten &middot; IV-Fl&auml;chen &middot; Strategien &middot; OptionMetrics&nbsp;1996&ndash;2021</div>
+    </div>
+    <span id="status" class="status" data-kit="status"><i class="dot wait"></i><span class="status-text">Initialisiere &hellip;</span></span>
+    <button type="button" class="icon-btn" id="ai_toggle" aria-pressed="false" aria-label="KI-Assistent"
+            title="KI-Assistent: erkl&auml;rt Bedienung und interpretiert die aktuelle Ansicht">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M11 3.5l1.9 5 5 1.9-5 1.9-1.9 5-1.9-5-5-1.9 5-1.9z"/><path d="M18.5 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg>
+    </button>
+    <button type="button" class="icon-btn" id="cfg_open" aria-label="Einstellungen (Datenquelle)" title="Einstellungen (Datenquelle)">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button type="button" class="icon-btn" data-kit="theme"></button>
+  </div>
+</header>
 
-<form id="qform" class="panel query">
-  <button type="button" class="ghost" id="rnd" title="Zufällige SecID an einem zufälligen Handelstag laden">&#127922; Zufall</button>
-  <label>Handelstag
-    <span style="display:flex;gap:0.3rem;align-items:center">
-      <button type="button" class="ghost iconbtn" id="d_prev" title="vorheriger Handelstag">&#9664;</button>
-      <select id="d_y" title="Jahr"></select>
-      <select id="d_m" title="Monat"></select>
-      <select id="d_d" title="Tag"></select>
-      <button type="button" class="ghost iconbtn" id="d_next" title="n&auml;chster Handelstag">&#9654;</button>
+<main class="wrap">
+<form id="qform" class="card query" aria-label="Abfrage">
+  <div class="field" role="group" aria-label="Handelstag">
+    <span>Handelstag</span>
+    <span class="datepick">
+      <button type="button" class="icon-btn" id="d_prev" aria-label="vorheriger Handelstag" title="vorheriger Handelstag"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+      <span class="pick"><select id="d_y" title="Jahr" aria-label="Jahr"></select></span>
+      <span class="pick"><select id="d_m" title="Monat" aria-label="Monat"></select></span>
+      <span class="pick"><select id="d_d" title="Tag" aria-label="Tag"></select></span>
+      <button type="button" class="icon-btn" id="d_next" aria-label="n&auml;chster Handelstag" title="n&auml;chster Handelstag"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
     </span>
-  </label>
-  <label>Ticker
-    <input type="text" id="ticker" list="tickerlist" placeholder="z.&thinsp;B. SPY"
-           style="width:7rem;text-transform:uppercase" autocomplete="off" spellcheck="false">
+  </div>
+  <label class="field">Ticker
+    <input class="input" type="text" id="ticker" list="tickerlist" placeholder="z.&thinsp;B. SPY"
+           autocomplete="off" spellcheck="false">
   </label>
   <datalist id="tickerlist"></datalist>
-  <label>SecID
-    <input type="number" id="secid" placeholder="z.&thinsp;B. 109497" required style="width:10rem">
+  <label class="field">SecID
+    <input class="input" type="number" id="secid" placeholder="z.&thinsp;B. 109497" required>
   </label>
-  <button type="submit" class="primary" id="go">Suchen</button>
+  <div class="query-actions">
+    <button type="button" class="btn" id="rnd" title="Zuf&auml;llige SecID an einem zuf&auml;lligen Handelstag laden">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+      Zufall
+    </button>
+    <button type="submit" class="btn primary" id="go">Suchen</button>
+  </div>
+  <div id="secinfo"></div>
 </form>
 
-<div class="ctxbar">
-  <span id="secinfo"></span>
+<div id="statusmsg" class="banner err" role="status" hidden>
+  <span id="statusmsg_i" aria-hidden="true">&#10005;</span>
+  <span id="statusmsg_t"></span>
+  <button type="button" class="link-btn" id="statusmsg_cfg">Einstellungen</button>
 </div>
 
-<div id="empty" class="empty">
-  <div class="big">Noch keine Auswahl geladen</div>
-  <div class="mono">Handelstag w&auml;hlen, Ticker oder SecID eingeben &rarr; &bdquo;Suchen&ldquo;</div>
+<div id="empty" class="card empty">
+  <div class="empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.6-4.6"/></svg></div>
+  <div class="empty-title">Noch keine Auswahl geladen</div>
+  <div class="empty-text">Handelstag w&auml;hlen, Ticker oder SecID eingeben &rarr; &bdquo;Suchen&ldquo;</div>
+  <div class="empty-text" id="empty_keyhint" hidden>F&uuml;r die Cloud-Daten braucht dieses Ger&auml;t einen Zugriffsschl&uuml;ssel.</div>
+  <button type="button" class="btn tinted" id="empty_key" hidden>Zugriffsschl&uuml;ssel eintragen</button>
 </div>
 
-<div id="results" class="hidden">
-  <div class="toolbar" style="justify-content:space-between">
-    <span class="seg">
-      <button type="button" class="vbtn active" id="v_table">Tabelle</button>
-      <button type="button" class="vbtn" id="v_surface">IV-Fl&auml;che</button>
-      <button type="button" class="vbtn" id="v_series">Zeitreihe</button>
-      <button type="button" class="vbtn" id="v_strategy">Strategie</button>
-    </span>
-    <span id="spotinfo" class="chip"></span>
-  </div>
-  <div class="toolbar">
-    <label>Verfall
-      <select id="f_exp"><option value="">alle</option></select>
-    </label>
-    <label>Typ
-      <select id="f_cp">
-        <option value="">Calls + Puts</option>
-        <option value="C">nur Calls</option>
-        <option value="P">nur Puts</option>
-      </select>
-    </label>
-    <label id="strikewrap" class="hidden">Strike
-      <select id="f_strike"></select>
-    </label>
-    <label id="axiswrap" class="hidden">X-Achse
-      <select id="iv_xaxis">
-        <option value="strike">Strike</option>
-        <option value="money">Moneyness (K/S)</option>
-        <option value="logmoney">Log-Moneyness ln(K/S)</option>
-      </select>
-    </label>
-    <span class="spacer"></span>
-    <span id="rowcount" class="chip"></span>
-    <button type="button" class="ghost" id="reset">Filter zur&uuml;cksetzen</button>
-    <button type="button" class="ghost" id="csv">CSV</button>
-    <button type="button" class="ghost" id="xlsx">Excel</button>
-  </div>
-  <div class="tablewrap"><table id="tbl">
-    <thead><tr>
-      <th>Verfall</th><th>Typ</th><th>Strike</th><th>Bid</th><th>Ask</th>
-      <th>Volumen</th><th>Open&nbsp;Int.</th><th>IV</th><th>Delta</th>
-      <th>Gamma</th><th>Vega</th><th>Theta</th><th>Option-ID</th>
-    </tr></thead>
-    <tbody></tbody>
-  </table></div>
-  <div id="surface" class="hidden"></div>
-  <div id="series" class="hidden">
-    <div class="toolbar" style="margin-top:0">
-      <label style="flex-direction:row;align-items:center;gap:0.4rem">von
-        <span style="display:flex;gap:0.3rem;align-items:center">
-          <button type="button" class="ghost iconbtn" id="sv_prev" title="vorheriger Handelstag">&#9664;</button>
-          <select id="sv_y" title="Jahr"></select>
-          <select id="sv_m" title="Monat"></select>
-          <select id="sv_d" title="Tag"></select>
-          <button type="button" class="ghost iconbtn" id="sv_next" title="n&auml;chster Handelstag">&#9654;</button>
-        </span>
-      </label>
-      <label style="flex-direction:row;align-items:center;gap:0.4rem">bis
-        <span style="display:flex;gap:0.3rem;align-items:center">
-          <button type="button" class="ghost iconbtn" id="sb_prev" title="vorheriger Handelstag">&#9664;</button>
-          <select id="sb_y" title="Jahr"></select>
-          <select id="sb_m" title="Monat"></select>
-          <select id="sb_d" title="Tag"></select>
-          <button type="button" class="ghost iconbtn" id="sb_next" title="n&auml;chster Handelstag">&#9654;</button>
-        </span>
-      </label>
-      <label style="flex-direction:row;align-items:center;gap:0.4rem">Metrik
-        <select id="s_metric">
-          <option value="mid">Mid (Bid+Ask)/2</option>
-          <option value="best_bid">Bid</option>
-          <option value="best_offer">Ask</option>
-          <option value="implied_vol">Implizite Volatilit&auml;t</option>
-          <option value="volume">Volumen</option>
-          <option value="open_interest">Open Interest</option>
-          <option value="delta">Delta</option>
-          <option value="gamma">Gamma</option>
-          <option value="vega">Vega</option>
-          <option value="theta">Theta</option>
-        </select>
-      </label>
-      <button type="button" class="primary" id="s_load">Zeitreihe laden</button>
-      <button type="button" class="ghost hidden" id="s_stop">Abbrechen</button>
-      <span id="s_loading" class="hidden">
-        <span class="spinner"></span><span class="progress"><span id="s_bar"></span></span>
-      </span>
-      <span id="s_prog"></span>
-    </div>
-    <div class="chartbox">
-      <div id="serieschart"></div>
-      <div id="series_ov" class="overlay hidden"><span class="spinner"></span><span id="series_ov_txt">Lade &hellip;</span></div>
-    </div>
-  </div>
-  <div id="strategy" class="hidden">
-    <section class="card">
-      <div class="card-h"><span class="idx">1</span> Aufbau
-        <span class="aside" id="g_name"></span>
+<div id="results" class="stack hidden">
+  <section class="card" id="viewcard" aria-label="Ergebnis">
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Ansicht">
+        <button type="button" id="v_table" aria-pressed="true">Tabelle</button>
+        <button type="button" id="v_surface" aria-pressed="false">IV-Fl&auml;che</button>
+        <button type="button" id="v_series" aria-pressed="false">Zeitreihe</button>
+        <button type="button" id="v_strategy" aria-pressed="false">Strategie</button>
       </div>
-      <div class="toolbar" style="margin-top:0">
-        <label>Vorlage
-          <select id="g_tpl"></select>
+      <span id="spotinfo" class="chip"></span>
+    </div>
+    <div class="toolbar start">
+      <label class="field">Verfall
+        <span class="pick"><select id="f_exp"><option value="">alle</option></select></span>
+      </label>
+      <label class="field">Typ
+        <span class="pick"><select id="f_cp">
+          <option value="">Calls + Puts</option>
+          <option value="C">nur Calls</option>
+          <option value="P">nur Puts</option>
+        </select></span>
+      </label>
+      <label id="strikewrap" class="field hidden">Strike
+        <span class="pick"><select id="f_strike"></select></span>
+      </label>
+      <label id="axiswrap" class="field hidden">X-Achse
+        <span class="pick"><select id="iv_xaxis">
+          <option value="strike">Strike</option>
+          <option value="money">Moneyness (K/S)</option>
+          <option value="logmoney">Log-Moneyness ln(K/S)</option>
+        </select></span>
+      </label>
+      <span class="spacer"></span>
+      <span id="rowcount" class="chip"></span>
+      <button type="button" class="btn" id="reset">Filter zur&uuml;cksetzen</button>
+      <button type="button" class="btn" id="csv">CSV</button>
+      <button type="button" class="btn" id="xlsx">Excel</button>
+    </div>
+    <div class="table-wrap" id="tblwrap" tabindex="0" aria-label="Optionskette"><table id="tbl" class="table sticky hover">
+      <thead><tr>
+        <th>Verfall</th><th>Typ</th><th>Strike</th><th>Bid</th><th>Ask</th>
+        <th>Volumen</th><th>Open&nbsp;Int.</th><th>IV</th><th>Delta</th>
+        <th>Gamma</th><th>Vega</th><th>Theta</th><th>Option-ID</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div id="surface" class="hidden"></div>
+    <div id="series" class="hidden">
+      <div class="toolbar start">
+        <div class="field" role="group" aria-label="von">
+          <span>von</span>
+          <span class="datepick">
+            <button type="button" class="icon-btn" id="sv_prev" aria-label="von: vorheriger Handelstag" title="vorheriger Handelstag"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <span class="pick"><select id="sv_y" title="Jahr" aria-label="von: Jahr"></select></span>
+            <span class="pick"><select id="sv_m" title="Monat" aria-label="von: Monat"></select></span>
+            <span class="pick"><select id="sv_d" title="Tag" aria-label="von: Tag"></select></span>
+            <button type="button" class="icon-btn" id="sv_next" aria-label="von: n&auml;chster Handelstag" title="n&auml;chster Handelstag"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+          </span>
+        </div>
+        <div class="field" role="group" aria-label="bis">
+          <span>bis</span>
+          <span class="datepick">
+            <button type="button" class="icon-btn" id="sb_prev" aria-label="bis: vorheriger Handelstag" title="vorheriger Handelstag"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <span class="pick"><select id="sb_y" title="Jahr" aria-label="bis: Jahr"></select></span>
+            <span class="pick"><select id="sb_m" title="Monat" aria-label="bis: Monat"></select></span>
+            <span class="pick"><select id="sb_d" title="Tag" aria-label="bis: Tag"></select></span>
+            <button type="button" class="icon-btn" id="sb_next" aria-label="bis: n&auml;chster Handelstag" title="n&auml;chster Handelstag"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+          </span>
+        </div>
+        <label class="field">Metrik
+          <span class="pick"><select id="s_metric">
+            <option value="mid">Mid (Bid+Ask)/2</option>
+            <option value="best_bid">Bid</option>
+            <option value="best_offer">Ask</option>
+            <option value="implied_vol">Implizite Volatilit&auml;t</option>
+            <option value="volume">Volumen</option>
+            <option value="open_interest">Open Interest</option>
+            <option value="delta">Delta</option>
+            <option value="gamma">Gamma</option>
+            <option value="vega">Vega</option>
+            <option value="theta">Theta</option>
+          </select></span>
         </label>
-        <label title="Verfall f&uuml;r alle Legs bzw. den vorderen Verfall bei Zeitspreads">Verfall
-          <select id="g_tpl_e1"></select>
-        </label>
-        <label id="g_tpl_e2wrap" title="Nur f&uuml;r Zeitspreads: der hintere (sp&auml;tere) Verfall">2.&nbsp;Verfall
-          <select id="g_tpl_e2"></select>
-        </label>
-        <label title="Strike-Abstand der Vorlage in Strike-Punkten (z.&thinsp;B. 5 = 5 $ Abstand zum Spot je Stufe). Vorbelegt aus dem Strike-Raster der Kette.">Breite&nbsp;(Punkte)
-          <input type="number" id="g_tpl_w" value="5" min="0.01" step="0.5" style="width:5.5rem">
-        </label>
-        <button type="button" class="primary" id="g_tpl_go">Vorlage anwenden</button>
+        <button type="button" class="btn primary" id="s_load">Zeitreihe laden</button>
+        <button type="button" class="btn hidden" id="s_stop">Abbrechen</button>
+        <span id="s_loading" class="hidden">
+          <span class="spinner"></span><span class="progress"><span id="s_bar"></span></span>
+        </span>
+        <span id="s_prog"></span>
       </div>
-      <div class="toolbar">
-        <label>Aktion
-          <select id="g_side">
+      <div class="chartbox">
+        <div id="serieschart"></div>
+        <div id="series_ov" class="overlay hidden"><span class="spinner"></span><span id="series_ov_txt">Lade &hellip;</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="strategy" class="stack hidden">
+    <section class="card" aria-labelledby="h_build">
+      <div class="card-head">
+        <h2 id="h_build"><span class="badge accent step">1</span> Aufbau</h2>
+        <span class="card-meta" id="g_name"></span>
+      </div>
+      <div class="toolbar start">
+        <label class="field">Vorlage
+          <span class="pick"><select id="g_tpl"></select></span>
+        </label>
+        <label class="field" title="Verfall f&uuml;r alle Legs bzw. den vorderen Verfall bei Zeitspreads">Verfall
+          <span class="pick"><select id="g_tpl_e1"></select></span>
+        </label>
+        <label class="field" id="g_tpl_e2wrap" title="Nur f&uuml;r Zeitspreads: der hintere (sp&auml;tere) Verfall">2.&nbsp;Verfall
+          <span class="pick"><select id="g_tpl_e2"></select></span>
+        </label>
+        <label class="field" title="Strike-Abstand der Vorlage in Strike-Punkten (z.&thinsp;B. 5 = 5 $ Abstand zum Spot je Stufe). Vorbelegt aus dem Strike-Raster der Kette.">Breite&nbsp;(Punkte)
+          <input class="input" type="number" id="g_tpl_w" value="5" min="0.01" step="0.5" style="width:6rem">
+        </label>
+        <button type="button" class="btn primary" id="g_tpl_go">Vorlage anwenden</button>
+      </div>
+      <div class="toolbar start">
+        <label class="field">Aktion
+          <span class="pick"><select id="g_side">
             <option value="1">Kauf (Long)</option>
             <option value="-1">Verkauf (Short)</option>
-          </select>
+          </select></span>
         </label>
-        <label>Instrument
-          <select id="g_kind">
+        <label class="field">Instrument
+          <span class="pick"><select id="g_kind">
             <option value="opt">Option (aus der Kette)</option>
             <option value="stock">Aktie (100 St&uuml;ck)</option>
-          </select>
+          </select></span>
         </label>
-        <label>Menge
-          <input type="number" id="g_qty" value="1" min="1" style="width:4.5rem">
+        <label class="field">Menge
+          <input class="input" type="number" id="g_qty" value="1" min="1" style="width:5rem">
         </label>
-        <button type="button" class="primary" id="g_add">Leg hinzuf&uuml;gen</button>
-        <button type="button" class="ghost" id="g_clear">Alle Legs entfernen</button>
+        <button type="button" class="btn primary" id="g_add">Leg hinzuf&uuml;gen</button>
+        <button type="button" class="btn" id="g_clear">Alle Legs entfernen</button>
         <span class="spacer"></span>
-        <label title="Stichtag des Diagramms. Legs, die dann noch laufen, werden mit Black-Scholes bewertet (Modellwert, markiert).">Bewertung&nbsp;zum
-          <select id="g_eval"></select>
+        <label class="field" title="Stichtag des Diagramms. Legs, die dann noch laufen, werden mit Black-Scholes bewertet (Modellwert, markiert).">Bewertung&nbsp;zum
+          <span class="pick"><select id="g_eval"></select></span>
         </label>
       </div>
       <span id="g_hint"></span>
-      <div class="tablewrap" style="max-height:30vh"><table id="g_legs">
+      <div class="table-wrap" id="g_legwrap" tabindex="0" aria-label="Legs der Position"><table id="g_legs" class="table sticky">
         <thead><tr>
           <th>Aktion</th><th>Instrument</th><th>Strike</th><th>Verfall</th><th>Menge</th>
-          <th>Pr&auml;mie</th><th>IV</th><th>Delta</th><th></th>
+          <th>Pr&auml;mie</th><th>IV</th><th>Delta</th><th><span class="sr-only">Bearbeiten</span></th>
         </tr></thead>
         <tbody></tbody>
       </table></div>
@@ -491,46 +1089,47 @@
       <div id="payoffchart"></div>
     </section>
 
-    <section class="card">
-      <div class="card-h"><span class="idx">2</span> Monte-Carlo</div>
-      <div class="toolbar" style="margin-top:0">
-        <label>Vol-Quelle
-          <select id="mc_vsrc">
+    <section class="card" aria-labelledby="h_mc">
+      <div class="card-head"><h2 id="h_mc"><span class="badge accent step">2</span> Monte-Carlo</h2></div>
+      <div class="toolbar start">
+        <label class="field">Vol-Quelle
+          <span class="pick"><select id="mc_vsrc">
             <option value="iv">IV der Legs</option>
             <option value="real">realisiert (252&nbsp;T)</option>
             <option value="man">manuell</option>
-          </select>
+          </select></span>
         </label>
-        <label>Vol (%&nbsp;p.a.)
-          <input type="number" id="mc_vol" step="0.1" min="0.1" style="width:5.5rem">
+        <label class="field">Vol (%&nbsp;p.a.)
+          <input class="input" type="number" id="mc_vol" step="0.1" min="0.1" style="width:6rem">
         </label>
-        <label>Drift (%&nbsp;p.a.)
-          <input type="number" id="mc_drift" value="0" step="0.1" style="width:5rem">
+        <label class="field">Drift (%&nbsp;p.a.)
+          <input class="input" type="number" id="mc_drift" value="0" step="0.1" style="width:6rem">
         </label>
-        <label>Pfade
-          <input type="number" id="mc_n" value="20000" min="1000" max="200000" step="1000" style="width:6.5rem">
+        <label class="field">Pfade
+          <input class="input" type="number" id="mc_n" value="20000" min="1000" max="200000" step="1000" style="width:7.5rem">
         </label>
-        <button type="button" class="primary" id="mc_run">Simulieren</button>
+        <button type="button" class="btn primary" id="mc_run">Simulieren</button>
       </div>
       <div id="mc_out"></div>
       <div id="mcchart" class="hidden"></div>
     </section>
 
-    <section class="card">
-      <div class="card-h"><span class="idx">3</span> Realisiertes Ergebnis</div>
-      <div class="toolbar" style="margin-top:0">
-        <label>Auswertungstag
-          <span style="display:flex;gap:0.3rem;align-items:center">
-            <button type="button" class="ghost iconbtn" id="r_prev" title="vorheriger Handelstag">&#9664;</button>
-            <select id="r_date"></select>
-            <button type="button" class="ghost iconbtn" id="r_next" title="n&auml;chster Handelstag">&#9654;</button>
+    <section class="card" aria-labelledby="h_real">
+      <div class="card-head"><h2 id="h_real"><span class="badge accent step">3</span> Realisiertes Ergebnis</h2></div>
+      <div class="toolbar start">
+        <div class="field" role="group" aria-label="Auswertungstag">
+          <span>Auswertungstag</span>
+          <span class="datepick">
+            <button type="button" class="icon-btn" id="r_prev" aria-label="vorheriger Handelstag" title="vorheriger Handelstag"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <span class="pick"><select id="r_date" aria-label="Auswertungstag"></select></span>
+            <button type="button" class="icon-btn" id="r_next" aria-label="n&auml;chster Handelstag" title="n&auml;chster Handelstag"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
           </span>
-        </label>
-        <button type="button" class="ghost" id="r_curve">Verlauf laden (alle Handelstage)</button>
-        <button type="button" class="ghost hidden" id="r_stop">Abbrechen</button>
+        </div>
+        <button type="button" class="btn" id="r_curve">Verlauf laden (alle Handelstage)</button>
+        <button type="button" class="btn hidden" id="r_stop">Abbrechen</button>
       </div>
       <div id="r_out"></div>
-      <div class="tablewrap" style="max-height:22vh"><table id="r_legs">
+      <div class="table-wrap" id="r_legwrap" tabindex="0" aria-label="Beitrag je Leg"><table id="r_legs" class="table sticky">
         <thead><tr>
           <th>Aktion</th><th>Instrument</th><th>Strike</th><th>Verfall</th><th>Einstieg</th>
           <th title="Bid bei Glattstellung einer Kauf-Position, Ask bei Glattstellung einer Verkauf-Position">Kurs am Auswertungstag</th>
@@ -542,67 +1141,558 @@
     </section>
   </div>
 </div>
+</main>
 
-<aside id="aidrawer" class="aidrawer" aria-label="KI-Assistent">
-  <header>
-    <span>&#129302; Assistent</span>
-    <span class="who" id="ai_who"></span>
-    <select id="ai_model" class="aimodel hidden"
-            title="Modell &mdash; gilt ab der n&auml;chsten Frage, pro Ger&auml;t gespeichert"></select>
-    <span class="grow"></span>
-    <button type="button" class="ghost iconbtn" id="ai_close" title="Schlie&szlig;en">&#10005;</button>
-  </header>
-  <div id="ai_chips"></div>
-  <div id="ai_log"></div>
-  <footer>
+<aside id="aidrawer" class="drawer" aria-label="KI-Assistent">
+  <div class="drawer-head">
+    <h2>Assistent</h2>
+    <span id="ai_who"></span>
+    <span class="pick"><select id="ai_model" class="hidden" aria-label="Modell"
+            title="Modell &mdash; gilt ab der n&auml;chsten Frage, pro Ger&auml;t gespeichert"></select></span>
+    <button type="button" class="icon-btn" id="ai_close" aria-label="Schlie&szlig;en" title="Schlie&szlig;en"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div id="ai_chips" class="ai-chips"></div>
+  <div id="ai_log" class="drawer-body"></div>
+  <div class="drawer-foot">
     <form id="ai_form">
-      <textarea id="ai_text" rows="1" placeholder="Frage zur aktuellen Ansicht &hellip;"
-                spellcheck="false"></textarea>
-      <button type="submit" class="primary" id="ai_send">Senden</button>
-      <button type="button" class="ghost hidden" id="ai_stop">Stopp</button>
+      <textarea class="input" id="ai_text" rows="1" placeholder="Frage zur aktuellen Ansicht &hellip;"
+                aria-label="Frage an den Assistenten" spellcheck="false"></textarea>
+      <button type="submit" class="btn primary" id="ai_send">Senden</button>
+      <button type="button" class="btn hidden" id="ai_stop">Stopp</button>
     </form>
     <div class="aifoot">
-      <button type="button" id="ai_preview">Was wird gesendet?</button>
-      <button type="button" id="ai_clear">Verlauf leeren</button>
+      <button type="button" class="link-btn" id="ai_preview">Was wird gesendet?</button>
+      <button type="button" class="link-btn" id="ai_clear">Verlauf leeren</button>
     </div>
-  </footer>
+  </div>
 </aside>
 
-<dialog id="ai_dlg" class="aidlg">
-  <h2 id="ai_dlg_h">Daten an den KI-Dienst senden?</h2>
-  <p id="ai_dlg_p"></p>
-  <pre id="ai_dlg_json"></pre>
-  <div class="dlgrow">
-    <label class="inline" id="ai_dlg_askwrap">
+<dialog id="ai_dlg" class="sheet" aria-labelledby="ai_dlg_h">
+  <div class="sheet-head"><h2 id="ai_dlg_h">Daten an den KI-Dienst senden?</h2></div>
+  <div class="sheet-body">
+    <p id="ai_dlg_p"></p>
+    <pre id="ai_dlg_json" tabindex="0" aria-label="Zu sendende Daten (JSON)"></pre>
+    <label class="check square" id="ai_dlg_askwrap">
       <input type="checkbox" id="ai_dlg_ask"> vor jedem Senden erneut fragen
     </label>
-    <span class="grow"></span>
-    <button type="button" class="ghost" id="ai_dlg_cancel">Abbrechen</button>
-    <button type="button" class="primary" id="ai_dlg_ok">Senden</button>
+  </div>
+  <div class="sheet-foot">
+    <button type="button" class="btn" id="ai_dlg_cancel">Abbrechen</button>
+    <button type="button" class="btn primary" id="ai_dlg_ok">Senden</button>
   </div>
 </dialog>
 
-<details>
-  <summary>Einstellungen (Datenquelle)</summary>
-  <div class="row">
-    <label>Daten-Basis-URL
-      <input id="cfg_base" placeholder="http://localhost:8137/data">
+<dialog id="cfg_dlg" class="sheet" aria-labelledby="cfg_h">
+  <div class="sheet-head">
+    <h2 id="cfg_h">Einstellungen (Datenquelle)</h2>
+    <button type="button" class="icon-btn" data-kit="close" aria-label="Schlie&szlig;en" title="Schlie&szlig;en"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="sheet-body">
+    <label class="field">Daten-Basis-URL
+      <input class="input" id="cfg_base" placeholder="http://localhost:8137/data" autocomplete="off" spellcheck="false">
     </label>
-    <label title="F&uuml;r Cloud-Daten UND f&uuml;r den KI-Assistenten &mdash; der l&auml;uft immer &uuml;ber den Worker">
+    <label class="field" title="F&uuml;r Cloud-Daten UND f&uuml;r den KI-Assistenten &mdash; der l&auml;uft immer &uuml;ber den Worker">
       Zugriffsschl&uuml;ssel (Cloud-Daten &amp; KI)
-      <input id="cfg_key" placeholder="leer = kein Schl&uuml;ssel">
+      <input class="input" id="cfg_key" placeholder="leer = kein Schl&uuml;ssel" autocomplete="off" spellcheck="false">
     </label>
-    <label>KI-Endpunkt (optional, sonst Worker)
-      <input id="cfg_ai" placeholder="z.&thinsp;B. http://127.0.0.1:8787">
+    <label class="field">KI-Endpunkt (optional, sonst Worker)
+      <input class="input" id="cfg_ai" placeholder="z.&thinsp;B. http://127.0.0.1:8787" autocomplete="off" spellcheck="false">
     </label>
-    <button type="button" class="ghost" id="cfg_save" style="align-self:flex-end">Speichern &amp; neu laden</button>
+    <div class="cfg-ai">
+      <button type="button" class="btn sm" id="cfg_ai_reset">KI-Freigabe zur&uuml;cksetzen</button>
+      <span id="cfg_ai_state"></span>
+    </div>
   </div>
-  <div class="row">
-    <button type="button" class="ghost" id="cfg_ai_reset">KI-Freigabe zur&uuml;cksetzen</button>
-    <span id="cfg_ai_state" style="align-self:center"></span>
+  <div class="sheet-foot">
+    <button type="button" class="btn" data-kit="close">Abbrechen</button>
+    <button type="button" class="btn primary" id="cfg_save">Speichern &amp; neu laden</button>
   </div>
-</details>
+</dialog>
 
+<div class="toast" data-kit="toast" role="status" aria-live="polite" hidden><b></b><span></span></div>
+
+<script type="module">
+/* kit.js:start */
+/* dashboard-kit v1.0.0 (kit/VERSION), copied from Dashboard-hub/kit, do not edit here */
+// Dashboard-Kit 1.0.0 — the dashboards' shared chrome: theme, top bar, segmented thumbs, hub link, online state,
+// status, toast, sheets, folding and time stamps. ES module without dependencies.
+// Source: Dashboard-hub/kit. Copies in the app repos are never edited by hand: change the source, bump kit/VERSION,
+// run `node kit/tools/sync.mjs`.
+// Also runs pasted into an inline <script type="module"> next to app code (OptionSearch): every internal name starts
+// with _kit, nothing runs before a function is called, and globalThis.DashboardKit carries the whole API.
+
+export const KIT_VERSION = '1.0.0';
+export const HUB_URL = 'https://mariusrapp.github.io/Dashboard-hub/';
+
+// ── Strings (the kit's own labels) ───────────────────────────────────────────
+const _kitStr = {
+  de: {
+    hub: 'Alle Dashboards', toLight: 'Helles Erscheinungsbild', toDark: 'Dunkles Erscheinungsbild', offline: 'Offline',
+    now: 'gerade eben', min: n => `vor ${n} Min.`, hour: n => `vor ${n} Std.`, day: n => (n === 1 ? 'vor 1 Tag' : `vor ${n} Tagen`),
+    stamp: 'Stand', fold: 'Einklappen', unfold: 'Ausklappen', locale: 'de-DE',
+  },
+  en: {
+    hub: 'All dashboards', toLight: 'Switch to light appearance', toDark: 'Switch to dark appearance', offline: 'Offline',
+    now: 'just now', min: n => `${n} min ago`, hour: n => `${n} h ago`, day: n => (n === 1 ? '1 day ago' : `${n} days ago`),
+    stamp: 'Updated', fold: 'Fold', unfold: 'Show', locale: 'en-GB',
+  },
+};
+let _kitLang = '';   // set by initKit({ lang }); until then <html lang> decides
+function _kitLangOf(x) {
+  const l = String(x || document.documentElement.lang || 'de').slice(0, 2).toLowerCase();
+  return _kitStr[l] ? l : 'en';
+}
+function _kitT(lang) { return _kitStr[lang ? _kitLangOf(lang) : (_kitLang || _kitLangOf())]; }
+
+const _kitIcon = {
+  sun: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+  grid: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>',
+  chevron: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>',
+};
+
+// what has been wired already (every init function may be called again without effect)
+const _kitDone = { theme: false, topbar: false, online: false, observer: false, compact: new WeakSet(), sheets: new WeakSet() };
+
+function _kitEl(x) { return typeof x === 'string' ? document.querySelector(x) : x || null; }
+function _kitEmit(name, detail) { try { dispatchEvent(new CustomEvent(name, { detail })); } catch { /* old browsers */ } }
+
+// ── Theme ────────────────────────────────────────────────────────────────────
+// Light/dark follows the OS until the viewer picks one with a [data-kit="theme"] button; the choice is saved under
+// localStorage "theme" (the key BTC-Poly uses, so every dashboard on mariusrapp.github.io shares it).
+export function isDark() {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+// a token's current value, e.g. cssVar('--accent'); canvas and Plotly can't read CSS variables themselves
+export function cssVar(name) {
+  const n = String(name).startsWith('--') ? String(name) : '--' + name;
+  return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+}
+
+const _kitThemeFns = new Set();
+let _kitLastDark = null;
+
+function _kitPaintTheme() {
+  const dark = isDark(), t = _kitT(), want = dark ? 'sun' : 'moon';
+  for (const b of document.querySelectorAll('[data-kit="theme"]')) {
+    if (b.dataset.kitIcon !== want) { b.innerHTML = _kitIcon[want]; b.dataset.kitIcon = want; }
+    const label = dark ? t.toLight : t.toDark;
+    if (b.getAttribute('aria-label') !== label) { b.setAttribute('aria-label', label); b.title = label; }
+    if (b.tagName === 'BUTTON' && !b.getAttribute('type')) b.type = 'button';
+  }
+  // browser bar and home-screen status bar follow the picked theme, not just the OS setting
+  const page = cssVar('--page');
+  if (page) for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = page;
+  return dark;
+}
+
+function _kitThemeChanged() {
+  const dark = _kitPaintTheme();
+  if (dark === _kitLastDark) return;
+  _kitLastDark = dark;
+  for (const fn of _kitThemeFns) { try { fn(dark); } catch (e) { console.error(e); } }
+  _kitEmit('kit:theme', { dark });
+}
+
+// 'light' | 'dark' saves the choice, null follows the OS again
+export function setTheme(mode) {
+  const root = document.documentElement;
+  if (mode === 'light' || mode === 'dark') root.dataset.theme = mode; else delete root.dataset.theme;
+  try {
+    if (mode === 'light' || mode === 'dark') localStorage.setItem('theme', mode); else localStorage.removeItem('theme');
+  } catch { /* private mode */ }
+  _kitThemeChanged();
+}
+
+export function initTheme({ onChange } = {}) {
+  if (typeof onChange === 'function') _kitThemeFns.add(onChange);
+  if (_kitDone.theme) { _kitPaintTheme(); return; }
+  _kitDone.theme = true;
+  const root = document.documentElement;
+  // pages without the boot snippet in <head> still get the saved choice (with a flash)
+  try {
+    const t = localStorage.getItem('theme');
+    if ((t === 'light' || t === 'dark') && !root.dataset.theme) root.dataset.theme = t;
+  } catch { /* private mode */ }
+  _kitLastDark = _kitPaintTheme();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _kitThemeChanged);
+  document.addEventListener('click', e => {
+    if (e.target.closest && e.target.closest('[data-kit="theme"]')) setTheme(isDark() ? 'light' : 'dark');
+  });
+  // another tab on the same origin switched
+  addEventListener('storage', e => {
+    if (e.key !== 'theme') return;
+    if (e.newValue === 'light' || e.newValue === 'dark') root.dataset.theme = e.newValue; else delete root.dataset.theme;
+    _kitThemeChanged();
+  });
+}
+
+// ── Segmented controls: one thumb that slides to the pressed button ──────────
+// The app keeps setting aria-pressed (or aria-selected); the thumb follows. A thumb already rendered as
+// `.seg > .seg-thumb` (React) is reused, so nothing is inserted into DOM another library manages.
+const _kitSegs = new WeakMap();
+
+function _kitPressed(seg) { return seg.querySelector('button[aria-pressed="true"], button[aria-selected="true"]'); }
+
+function _kitAttachThumb(seg) {
+  if (!seg || _kitSegs.has(seg) || seg.dataset.thumb === 'off') return;
+  let thumb = seg.querySelector(':scope > .seg-thumb');
+  if (!thumb) {
+    thumb = document.createElement('i');
+    thumb.className = 'seg-thumb';
+    thumb.setAttribute('aria-hidden', 'true');
+    seg.prepend(thumb);
+    seg.classList.add('seg-live');
+  }
+  let pressed = null, placed = false;
+  const place = () => {
+    pressed = _kitPressed(seg);
+    if (!pressed || !pressed.offsetWidth) { thumb.style.opacity = '0'; placed = false; return; }   // none pressed, or not shown
+    if (!placed) thumb.style.transition = 'none';   // first time, or shown again: appear in place, don't fly in
+    thumb.style.opacity = '1';
+    thumb.style.width = pressed.offsetWidth + 'px';
+    thumb.style.height = pressed.offsetHeight + 'px';
+    thumb.style.transform = `translate(${pressed.offsetLeft}px, ${pressed.offsetTop}px)`;
+    if (!placed) { void thumb.offsetWidth; thumb.style.transition = ''; placed = true; }
+  };
+  // aria-pressed is often rewritten with the same value: only a new pressed button needs a layout read
+  new MutationObserver(() => { if (_kitPressed(seg) !== pressed) place(); })
+    .observe(seg, { attributes: true, attributeFilter: ['aria-pressed', 'aria-selected'], subtree: true, childList: true });
+  if ('ResizeObserver' in window) new ResizeObserver(place).observe(seg);   // relabelled, unfolded, resized
+  _kitSegs.set(seg, place);
+  place();
+}
+
+export function initSegs(root = document) {
+  const r = _kitEl(root);
+  if (!r) return;
+  if (r.matches && r.matches('.seg')) _kitAttachThumb(r);
+  if (r.querySelectorAll) for (const seg of r.querySelectorAll('.seg')) _kitAttachThumb(seg);
+  _kitObserve();
+}
+
+// click handling for a .seg whose buttons carry data-value: sets aria-pressed and calls onChange(value, button) when the
+// choice changes. Returns set(value), which selects without calling onChange.
+export function bindSeg(seg, onChange) {
+  const s = _kitEl(seg);
+  if (!s) return () => null;
+  for (const b of s.querySelectorAll('button:not([type])')) b.type = 'button';   // never submit a surrounding form
+  const set = value => {
+    let hit = null;
+    for (const b of s.querySelectorAll('button[data-value]')) {
+      const on = b.dataset.value === String(value);
+      b.setAttribute('aria-pressed', String(on));
+      if (on) hit = b;
+    }
+    return hit;
+  };
+  s.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('button[data-value]');
+    if (!b || !s.contains(b) || b.disabled || b.getAttribute('aria-pressed') === 'true') return;
+    set(b.dataset.value);
+    if (typeof onChange === 'function') onChange(b.dataset.value, b);
+  });
+  _kitAttachThumb(s);
+  return set;
+}
+
+// ── Top bar ──────────────────────────────────────────────────────────────────
+// Its material only shows while content is under it (html.scrolled). With `watch`, html.compact is set while that
+// element is scrolled out of view, so the bar's .brand-live line can stand in for it.
+export function initTopbar({ watch } = {}) {
+  const root = document.documentElement;
+  if (!_kitDone.topbar) {
+    _kitDone.topbar = true;
+    const onScroll = () => root.classList.toggle('scrolled', scrollY > 2);
+    addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+  const el = _kitEl(watch);
+  if (!el || _kitDone.compact.has(el) || !('IntersectionObserver' in window)) return;
+  _kitDone.compact.add(el);
+  const bar = document.querySelector('.topbar');
+  new IntersectionObserver(([entry]) => root.classList.toggle('compact', !entry.isIntersecting),
+    { rootMargin: `-${bar ? bar.offsetHeight : 0}px 0px 0px 0px` }).observe(el);
+}
+
+// ── Hub link ─────────────────────────────────────────────────────────────────
+// [data-kit="hub"]: link to the hub (grid icon, label). Hidden inside an installed app: it was opened from the home
+// screen, and the link would only open a browser sheet on top of it.
+export function isStandalone() {
+  return matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches ||
+    navigator.standalone === true;
+}
+
+function _kitPaintHub(a) {
+  if (a.dataset.kitHub) return;
+  a.dataset.kitHub = '1';
+  const label = _kitT().hub;
+  if (a.tagName === 'A') { if (!a.getAttribute('href')) a.setAttribute('href', HUB_URL); }
+  else a.addEventListener('click', () => { location.href = HUB_URL; });
+  if (!a.getAttribute('aria-label')) a.setAttribute('aria-label', label);
+  if (!a.title) a.title = label;
+  if (!a.children.length && !a.textContent.trim()) a.innerHTML = _kitIcon.grid;
+  if (isStandalone()) a.hidden = true;
+}
+
+export function initHubLink() {
+  for (const a of document.querySelectorAll('[data-kit="hub"]')) _kitPaintHub(a);
+  _kitObserve();
+}
+
+// ── Status (top bar) and online state ───────────────────────────────────────
+// <span class="status" data-kit="status"><i class="dot wait"></i><span class="status-text">…</span></span>
+// setStatus('live' | 'wait' | 'stale' | 'err' | 'offline', text). While the device is offline every status element
+// shows "Offline"; afterwards the last state comes back (also for apps that write the status themselves).
+const _kitStatus = { state: null, text: '' };
+const _kitStatusSaved = new WeakMap();
+
+function _kitStatusParts(el) {
+  let dot = el.querySelector('.dot'), txt = el.querySelector('.status-text');
+  if (!dot) { dot = document.createElement('i'); dot.className = 'dot'; el.prepend(dot); }
+  if (!txt) { txt = document.createElement('span'); txt.className = 'status-text'; el.append(txt); }
+  return [dot, txt];
+}
+
+function _kitRenderStatus() {
+  const off = document.documentElement.hasAttribute('data-offline');
+  if (_kitStatus.state == null && !off) return;   // the app never called setStatus: its own markup stays
+  const state = off ? 'offline' : _kitStatus.state, text = off ? _kitT().offline : _kitStatus.text;
+  for (const el of document.querySelectorAll('[data-kit="status"]')) {
+    const [dot, txt] = _kitStatusParts(el);
+    if (off && _kitStatus.state == null && !_kitStatusSaved.has(el)) _kitStatusSaved.set(el, [dot.className, txt.textContent]);
+    const cls = 'dot ' + state;
+    if (dot.className !== cls) dot.className = cls;
+    if (txt.textContent !== text) txt.textContent = text;
+    el.dataset.state = state;
+  }
+}
+
+export function setStatus(state, text) {
+  _kitStatus.state = state || 'wait';
+  if (text !== undefined) _kitStatus.text = text == null ? '' : String(text);
+  _kitRenderStatus();
+}
+
+export function initOnline() {
+  if (_kitDone.online) return;
+  _kitDone.online = true;
+  const root = document.documentElement;
+  const apply = () => {
+    const off = navigator.onLine === false;
+    if (off === root.hasAttribute('data-offline')) return;
+    root.toggleAttribute('data-offline', off);
+    _kitRenderStatus();
+    if (!off) {
+      for (const el of document.querySelectorAll('[data-kit="status"]')) {
+        const saved = _kitStatusSaved.get(el);
+        if (!saved) continue;
+        _kitStatusSaved.delete(el);
+        if (_kitStatus.state == null) { const [dot, txt] = _kitStatusParts(el); dot.className = saved[0]; txt.textContent = saved[1]; delete el.dataset.state; }
+      }
+    }
+    _kitEmit('kit:online', { online: !off });
+  };
+  addEventListener('online', apply);
+  addEventListener('offline', apply);
+  apply();
+}
+
+// ── Toast ────────────────────────────────────────────────────────────────────
+// Uses [data-kit="toast"] (<div class="toast" data-kit="toast" role="status" aria-live="polite" hidden><b></b><span></span></div>)
+// or creates it. ms = 0 keeps it until the returned function is called.
+let _kitToastTimer = 0;
+export function toast(title, body = '', { ms = 4000 } = {}) {
+  let el = document.querySelector('[data-kit="toast"]');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'toast';
+    el.dataset.kit = 'toast';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.hidden = true;
+    document.body.append(el);
+  }
+  const b = el.querySelector('b') || el.appendChild(document.createElement('b'));
+  const s = el.querySelector('span') || el.appendChild(document.createElement('span'));
+  b.textContent = title == null ? '' : String(title);
+  s.textContent = body == null ? '' : String(body);
+  s.hidden = !s.textContent;
+  el.hidden = false;
+  clearTimeout(_kitToastTimer);
+  const hide = () => { clearTimeout(_kitToastTimer); el.hidden = true; };
+  if (ms > 0) _kitToastTimer = setTimeout(hide, ms);
+  return hide;
+}
+
+// ── Time stamps ──────────────────────────────────────────────────────────────
+function _kitDate(ts) {
+  if (ts == null || ts === '') return null;
+  const d = ts instanceof Date ? ts : new Date(typeof ts === 'string' && /^\d+$/.test(ts) ? +ts : ts);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// "vor 5 Min." / "5 min ago"
+export function formatAge(ts, lang) {
+  const d = _kitDate(ts);
+  if (!d) return '';
+  const t = _kitT(lang), s = (Date.now() - d.getTime()) / 1000;
+  if (s < 45) return t.now;
+  const m = Math.round(s / 60);
+  if (m < 60) return t.min(m);
+  const h = Math.round(s / 3600);
+  if (h < 24) return t.hour(h);
+  return t.day(Math.round(s / 86400));
+}
+
+// "Stand 14:05" / "Updated 14:05"; another day adds the date, another year the year
+export function formatStamp(ts, lang) {
+  const d = _kitDate(ts);
+  if (!d) return '';
+  const t = _kitT(lang), now = new Date();
+  const time = d.toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return `${t.stamp} ${time}`;
+  const opts = d.getFullYear() === now.getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' };
+  return `${t.stamp} ${d.toLocaleDateString(t.locale, opts)}, ${time}`;
+}
+
+// ── Sheets (<dialog class="sheet">) ──────────────────────────────────────────
+// Modal; a click on the backdrop or on any [data-kit="close"] inside closes it; focus returns to where it was.
+const _kitSheetReturn = new WeakMap();
+
+export function openSheet(dlg) {
+  const d = _kitEl(dlg);
+  if (!d) return null;
+  if (!_kitDone.sheets.has(d)) {
+    _kitDone.sheets.add(d);
+    d.addEventListener('click', e => {
+      if (e.target.closest && e.target.closest('[data-kit="close"]')) { closeSheet(d); return; }
+      if (e.target !== d) return;
+      const r = d.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeSheet(d);
+    });
+    d.addEventListener('close', () => {
+      const back = _kitSheetReturn.get(d);
+      _kitSheetReturn.delete(d);
+      if (back && back.isConnected && back.focus) back.focus({ preventScroll: true });
+    });
+  }
+  if (d.open) return d;
+  _kitSheetReturn.set(d, document.activeElement);
+  if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
+  return d;
+}
+
+export function closeSheet(dlg) {
+  const d = _kitEl(dlg);
+  if (!d || !d.open) return;
+  if (typeof d.close === 'function') d.close(); else d.removeAttribute('open');
+}
+
+// ── Folding ──────────────────────────────────────────────────────────────────
+// Every card matching `selector` (with an id) folds to its title row (chevron in its corner, or a tap on the title);
+// a KPI tile (.card.kpi) to its label and number. A card that opens with a toolbar gets a title row that only shows
+// while folded (from aria-label). Remembered in localStorage under `key` (namespace it: '<app>:folded').
+// Unfolding dispatches 'resize' so charts drawn at their width catch up; 'kit:fold' {id, folded} on every change.
+export function initFold({ key = 'kit:folded', selector = '.card[id]', root = document } = {}) {
+  const r = _kitEl(root);
+  if (!r) return;
+  let folded = new Set();
+  try { const a = JSON.parse(localStorage.getItem(key)); if (Array.isArray(a)) folded = new Set(a); } catch { /* none yet */ }
+  const save = () => { try { localStorage.setItem(key, JSON.stringify([...folded])); } catch { /* private mode */ } };
+  const t = _kitT();
+  const show = (card, btn, isFolded) => {
+    card.classList.toggle('folded', isFolded);
+    btn.setAttribute('aria-expanded', String(!isFolded));
+    btn.title = `${isFolded ? t.unfold : t.fold}: ${card.dataset.fold}`;
+    btn.setAttribute('aria-label', btn.title);
+  };
+  for (const card of r.querySelectorAll(selector)) {
+    if (!card.id || card.classList.contains('foldable') || card.dataset.fold === 'off') continue;
+    const kpi = card.classList.contains('kpi');
+    let head = card.querySelector(kpi ? ':scope > .kpi-label' : ':scope > .card-head');
+    if (!head) {
+      head = document.createElement('div');
+      head.className = 'card-head fold-head';
+      const h = document.createElement('h2');
+      h.textContent = card.getAttribute('aria-label') || '';
+      head.append(h);
+      card.prepend(head);
+    }
+    if (!card.dataset.fold) {
+      const h2 = head.querySelector('h2');
+      card.dataset.fold = (h2 && h2.textContent.trim()) || (kpi && head.textContent.trim()) || card.getAttribute('aria-label') || card.id;
+    }
+    let btn = card.querySelector(':scope > .fold');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'fold';
+      btn.innerHTML = _kitIcon.chevron;
+      card.prepend(btn);
+    }
+    card.classList.add('foldable');
+    const toggle = () => {
+      const now = !card.classList.contains('folded');
+      show(card, btn, now);
+      if (now) folded.add(card.id); else folded.delete(card.id);
+      save();
+      _kitEmit('kit:fold', { id: card.id, folded: now });
+      if (!now) dispatchEvent(new Event('resize'));
+    };
+    btn.addEventListener('click', toggle);
+    const handle = kpi ? head : head.querySelector('h2');
+    if (handle) handle.addEventListener('click', toggle);
+    show(card, btn, folded.has(card.id));
+  }
+}
+
+// ── Later DOM ────────────────────────────────────────────────────────────────
+// UIs rendered with innerHTML get their thumbs, hub links, theme icons and status parts without another call.
+// Only element insertions schedule a pass (text updates don't), at most one per frame.
+let _kitScanQueued = false;
+function _kitScan() {
+  _kitScanQueued = false;
+  for (const seg of document.querySelectorAll('.seg')) _kitAttachThumb(seg);
+  for (const a of document.querySelectorAll('[data-kit="hub"]')) _kitPaintHub(a);
+  if (_kitDone.theme) _kitPaintTheme();
+  _kitRenderStatus();
+}
+function _kitObserve() {
+  if (_kitDone.observer) return;
+  if (!document.body) { document.addEventListener('DOMContentLoaded', _kitObserve, { once: true }); return; }
+  _kitDone.observer = true;
+  new MutationObserver(muts => {
+    if (_kitScanQueued) return;
+    for (const m of muts) for (const n of m.addedNodes) {
+      if (n.nodeType === 1) { _kitScanQueued = true; requestAnimationFrame(_kitScan); return; }
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+}
+
+// ── All at once ──────────────────────────────────────────────────────────────
+// initKit({ app: 'index', lang: 'de', fold: true, onTheme: dark => redraw(), topbar: { watch: '#price' } })
+// Calling it again is harmless (listeners are only added once).
+export function initKit({ app = 'app', lang, fold = false, onTheme, topbar } = {}) {
+  if (lang) _kitLang = _kitLangOf(lang);
+  else if (!_kitLang) _kitLang = _kitLangOf();
+  initTheme({ onChange: onTheme });
+  initTopbar(topbar || {});
+  initSegs(document);
+  initHubLink();
+  initOnline();
+  if (fold) initFold({ key: `${app}:folded`, ...(typeof fold === 'object' ? fold : {}) });
+  return globalThis.DashboardKit;
+}
+
+globalThis.DashboardKit = Object.freeze({
+  KIT_VERSION, HUB_URL, initKit, initTheme, setTheme, isDark, cssVar, initSegs, bindSeg, initTopbar, isStandalone,
+  initHubLink, initOnline, setStatus, toast, formatAge, formatStamp, openSheet, closeSheet, initFold,
+});
+/* kit.js:end */
+</script>
 <script type="module">
 // Lokal (serve_local.py) → lokale Daten; öffentlich gehostet → Cloudflare-
 // Worker (Auth-Proxy vor dem privaten HF-Dataset). In beiden Fällen überschreibt
@@ -616,21 +1706,40 @@ const BASE = localStorage.getItem("os_base") || DEFAULT_BASE;
 const KEY  = localStorage.getItem("os_key") || "";
 
 const $ = id => document.getElementById(id);
+
+// Dashboard-Kit (eingefügt im Modul davor): Theme, Kopfleiste, Status, Toast, Sheets
+const { initKit, setStatus, toast, openSheet, cssVar } = globalThis.DashboardKit;
+initKit({ app: "optionsearch", lang: "de" });
+
+// Status: Punkt + Text in der Kopfleiste (#status behält die Klassen ok/warn/err);
+// Fehler und Warnungen zusätzlich in voller Länge als Hinweis unter der Abfrage —
+// liegt der gerade außerhalb des Sichtfelds, kommt ein Toast dazu.
+const STATUS_STATE = { ok: "live", warn: "stale", err: "err" };
 const status = (msg, cls = "") => {
-  $("status").textContent = msg;
-  $("status").className = "statuschip" + (cls ? " " + cls : "");
+  $("status").className = "status" + (cls ? " " + cls : "");
+  $("status").title = msg;
+  setStatus(STATUS_STATE[cls] || "wait", msg);
+  const box = $("statusmsg");
+  if (cls !== "err" && cls !== "warn") { box.hidden = true; return; }
+  box.className = "banner " + cls;
+  $("statusmsg_i").textContent = cls === "err" ? "✕" : "◆";
+  $("statusmsg_t").textContent = msg;
+  $("statusmsg_cfg").hidden = cls !== "err";
+  box.hidden = false;
+  const r = box.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > innerHeight) toast(cls === "err" ? "Fehler" : "Hinweis", msg);
 };
 const fmtDate = d => `${String(d).slice(0,4)}-${String(d).slice(4,6)}-${String(d).slice(6,8)}`;
 const fmtNum = (v, dec) => v == null ? "" :
   Number(v).toLocaleString("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: dec });
 const dataUrl = path => BASE + "/" + path + (KEY ? "?key=" + encodeURIComponent(KEY) : "");
 
-// Kennzahl-Kachel (Readout-Zelle): Label · Wert (mono) · optionale Einheit ·
-// Zustand pos/neg/warn/accent färbt Wert + linke Leiste. Nur Präsentation.
+// Kennzahl-Kachel (Kit .stat): Label · Wert · optionale Einheit ·
+// Zustand pos/neg/warn/accent färbt den Wert. Nur Präsentation.
 const tile = (k, v, u = "", state = "", title = "") =>
-  `<div class="tile"${state ? ` data-state="${state}"` : ""}${title ? ` title="${title}"` : ""}>` +
-  `<span class="k">${k}</span>` +
-  `<span class="v">${v}${u ? `<span class="u">${u}</span>` : ""}</span></div>`;
+  `<div class="stat"${state ? ` data-state="${state}"` : ""}${title ? ` title="${title}"` : ""}>` +
+  `<span class="stat-l">${k}</span>` +
+  `<span class="stat-v">${v}${u ? ` <small>${u}</small>` : ""}</span></div>`;
 const signState = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
 
 // KI-Endpunkt: standardmäßig IMMER der Worker (auch wenn die Daten lokal aus
@@ -641,6 +1750,15 @@ const AI_BASE = (localStorage.getItem("os_ai_base") || WORKER_BASE).replace(/\/+
 $("cfg_base").value = BASE;
 $("cfg_key").value = KEY;
 $("cfg_ai").value = localStorage.getItem("os_ai_base") || "";
+// Einstellungen: Zahnrad in der Kopfleiste öffnet das Sheet (gleiche Felder wie früher)
+const openSettings = (focusKey = false) => {
+  openSheet($("cfg_dlg"));
+  if (focusKey) $("cfg_key").focus();
+};
+$("cfg_open").onclick = () => openSettings();
+$("statusmsg_cfg").onclick = () => openSettings();
+$("empty_key").onclick = () => openSettings(true);
+if (!isLocal && !KEY) $("empty_key").hidden = $("empty_keyhint").hidden = false;   // online ohne Schlüssel
 $("cfg_save").onclick = () => {
   localStorage.setItem("os_base", $("cfg_base").value.trim().replace(/\/+$/, ""));
   localStorage.setItem("os_key", $("cfg_key").value.trim());
@@ -899,8 +2017,8 @@ $("reset").onclick = () => {
 function setView(v) {
   view = v;
   for (const name of ["table", "surface", "series", "strategy"])
-    $("v_" + name).classList.toggle("active", v === name);
-  document.querySelector(".tablewrap").classList.toggle("hidden", v !== "table");
+    $("v_" + name).setAttribute("aria-pressed", String(v === name));   // Kit-Segment: Markierung folgt
+  $("tblwrap").classList.toggle("hidden", v !== "table");
   $("surface").classList.toggle("hidden", v !== "surface");
   $("series").classList.toggle("hidden", v !== "series");
   $("strategy").classList.toggle("hidden", v !== "strategy");
@@ -1071,24 +2189,23 @@ async function renderSurface() {
 
   if (!pts.length) {
     $("rowcount").textContent = "";
-    clearPlot(el, '<div style="padding:1rem;color:var(--muted)">Keine IV-Daten für diese Auswahl.</div>');
+    clearPlot(el, '<div class="plot-msg">Keine IV-Daten für diese Auswahl.</div>');
     return;
   }
 
   let Plotly;
   try {
-    if (!plotlyReady) el.innerHTML = '<div style="padding:1rem;color:var(--muted)">Lade 3D-Grafik …</div>';
+    if (!plotlyReady) el.innerHTML = '<div class="plot-msg">Lade 3D-Grafik …</div>';
     Plotly = await loadPlotly();
   } catch (e) {
-    clearPlot(el, `<div style="padding:1rem;color:var(--err)">${e.message}</div>`);
+    clearPlot(el, `<div class="plot-msg err">${e.message}</div>`);
     return;
   }
 
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
   const layoutBase = {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 55, r: 10, t: 10, b: 45 },
   };
   const cfg = { responsive: true, displaylogo: false };
@@ -1105,8 +2222,8 @@ async function renderSurface() {
       hovertemplate: hoverX + "<br>IV %{y:.4f}<extra></extra>",
     }], {
       ...layoutBase,
-      xaxis: { title: { text: xLabel }, gridcolor: C("--border"), zeroline: false },
-      yaxis: { title: { text: "Implizite Volatilität" }, gridcolor: C("--border"), zeroline: false },
+      xaxis: { title: { text: xLabel }, gridcolor: C("--grid"), zeroline: false },
+      yaxis: { title: { text: "Implizite Volatilität" }, gridcolor: C("--grid"), zeroline: false },
     }, cfg);
     return;
   }
@@ -1139,7 +2256,7 @@ async function renderSurface() {
 
   if (z.length < 2) {
     $("rowcount").textContent = "";
-    clearPlot(el, '<div style="padding:1rem;color:var(--muted)">Zu wenige Verfalle mit IV-Daten für eine Fläche — Verfall-Filter für den Smile nutzen.</div>');
+    clearPlot(el, '<div class="plot-msg">Zu wenige Verfalle mit IV-Daten für eine Fläche — Verfall-Filter für den Smile nutzen.</div>');
     return;
   }
 
@@ -1148,26 +2265,27 @@ async function renderSurface() {
   await Plotly.react(readyPlot(el), [{
     type: "surface", x: xs, y: ys, z,
     colorscale: "Viridis", connectgaps: false,
-    colorbar: { title: { text: "IV" }, outlinewidth: 0, tickfont: { color: C("--fg") } },
+    colorbar: { title: { text: "IV" }, outlinewidth: 0, tickfont: { color: C("--ink-2") } },
     customdata: ytext.map(t => xs.map(() => t)),
     hovertemplate: hoverX + "<br>Verfall %{customdata} (%{y} Tage)<br>IV %{z:.4f}<extra></extra>",
   }], {
     ...layoutBase,
     scene: {
-      xaxis: { title: { text: xLabel }, gridcolor: C("--border"), color: C("--fg") },
-      yaxis: { title: { text: "Tage bis Verfall" }, gridcolor: C("--border"), color: C("--fg") },
-      zaxis: { title: { text: "IV" }, gridcolor: C("--border"), color: C("--fg") },
+      xaxis: { title: { text: xLabel }, gridcolor: C("--grid"), color: C("--ink-2") },
+      yaxis: { title: { text: "Tage bis Verfall" }, gridcolor: C("--grid"), color: C("--ink-2") },
+      zaxis: { title: { text: "IV" }, gridcolor: C("--grid"), color: C("--ink-2") },
       camera: { eye: { x: -1.5, y: -1.6, z: 0.8 } },
     },
   }, cfg);
 }
 
-// Theme-Wechsel: sichtbare Grafik mit neuen Farben neu zeichnen
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+// Theme-Wechsel (Knopf, System oder anderer Tab — das Kit meldet alle als kit:theme):
+// sichtbare Grafiken mit den neuen Token-Farben neu zeichnen
+addEventListener("kit:theme", () => {
   if ($("results").classList.contains("hidden")) return;
   if (view === "surface") renderSurface();
   else if (view === "series") drawSeries();
-  else if (view === "strategy") { drawPayoff(); drawRealized(); }
+  else if (view === "strategy") { drawPayoff(); drawRealized(); drawMc(); }
 });
 
 // ---- Spot des Underlyings: CRSP-Kurs, sonst Delta-Schätzung (sichtbar markiert) ----
@@ -1452,10 +2570,9 @@ async function drawSeries() {
   if (!seriesData || !seriesData.points.length || view !== "series") return;
   let Plotly;
   try { Plotly = await loadPlotly(); }
-  catch (e) { clearPlot($("serieschart"), `<div style="padding:1rem;color:var(--err)">${e.message}</div>`); return; }
+  catch (e) { clearPlot($("serieschart"), `<div class="plot-msg err">${e.message}</div>`); return; }
 
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
   const m = METRICS[$("s_metric").value];
   const ps = seriesData.points;
   const opt = seriesData.opt;
@@ -1475,27 +2592,27 @@ async function drawSeries() {
   if (estPts.length) traces.push({
     type: "scatter", mode: "markers", name: "≈ geschätzt (BS)",
     x: estPts.map(p => fmtDate(p.date)), y: estPts.map(yOf),
-    marker: { size: 6, color: C("--warn"), symbol: "diamond" },
+    marker: { size: 7, color: C("--warning"), symbol: "diamond" },
     hovertemplate: "%{x}<br>≈ " + m.label + " (geschätzt): %{y:,.4~f}<extra></extra>",
   });
   const u = seriesData.underlying;
   if (u && u.length) traces.push({
     type: "scatter", mode: "lines", name: "Underlying (CRSP)", yaxis: "y2",
     x: u.map(p => fmtDate(p.date)), y: u.map(p => p.prc),
-    line: { color: C("--muted"), width: 1, dash: "dot" },
+    line: { color: C("--muted-text"), width: 1, dash: "dot" },
     hovertemplate: "%{x}<br>Underlying: %{y:,.2f}<extra></extra>",
   });
   await Plotly.react(readyPlot($("serieschart")), traces, {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 60, r: 55, t: 40, b: 45 },
     title: { text: title, font: { size: 13 } },
     showlegend: estPts.length > 0,
     legend: { orientation: "h", y: 1.02, yanchor: "bottom", font: { size: 11 } },
-    xaxis: { title: { text: "Handelstag" }, gridcolor: C("--border"), zeroline: false, type: "date" },
-    yaxis: { title: { text: m.label }, gridcolor: C("--border"), zeroline: false },
+    xaxis: { title: { text: "Handelstag" }, gridcolor: C("--grid"), zeroline: false, type: "date" },
+    yaxis: { title: { text: m.label }, gridcolor: C("--grid"), zeroline: false },
     yaxis2: { overlaying: "y", side: "right", showgrid: false, zeroline: false,
-              title: { text: "Underlying" }, color: C("--muted") },
+              title: { text: "Underlying" }, color: C("--muted-text") },
   }, { responsive: true, displaylogo: false });
 }
 
@@ -1907,6 +3024,7 @@ function renderStrategy() {
   drawPayoff();
   drawLegBreakdown();
   drawRealized();
+  drawMc();   // nur Darstellung: Farben nach einem Theme-Wechsel in einer anderen Ansicht nachziehen
 }
 
 $("g_kind").onchange = renderStrategy;
@@ -1961,11 +3079,11 @@ function drawLegs() {
     <td>${fmtNum(l.prem, 4)}</td>
     <td>${l.kind === "stock" ? "—" : gv(l, "implied_vol")}</td>
     <td>${l.kind === "stock" ? "1,0000" : gv(l, "delta")}</td>
-    <td style="white-space:nowrap">
-      <button type="button" class="ghost iconbtn" data-leg="${i}" data-act="dec" title="Menge &minus;1">&minus;</button>
-      <button type="button" class="ghost iconbtn" data-leg="${i}" data-act="inc" title="Leg duplizieren (Menge +1)">+</button>
-      <button type="button" class="ghost iconbtn" data-leg="${i}" data-act="del" title="Leg entfernen">&#10005;</button>
-    </td>
+    <td><span class="legbtns">
+      <button type="button" class="icon-btn" data-leg="${i}" data-act="dec" title="Menge &minus;1" aria-label="Menge &minus;1">&minus;</button>
+      <button type="button" class="icon-btn" data-leg="${i}" data-act="inc" title="Leg duplizieren (Menge +1)" aria-label="Leg duplizieren (Menge +1)">+</button>
+      <button type="button" class="icon-btn" data-leg="${i}" data-act="del" title="Leg entfernen" aria-label="Leg entfernen">&#10005;</button>
+    </span></td>
   </tr>`).join("");
   for (const b of tb.querySelectorAll("button[data-leg]")) b.onclick = () => {
     const i = +b.dataset.leg;
@@ -1983,7 +3101,7 @@ async function drawPayoff() {
   $("g_name").textContent = detectStrategy();
   if (!legs.length) {
     $("g_stats").innerHTML = "";
-    clearPlot(el, '<div style="padding:1rem;color:var(--muted)">Noch keine Legs in der Position.</div>');
+    clearPlot(el, '<div class="plot-msg">Noch keine Legs in der Position.</div>');
     return;
   }
   const ed = evalDate();
@@ -2009,7 +3127,7 @@ async function drawPayoff() {
   const CAPHINT = "Maximal möglicher Verlust (mindestens der gezahlte Debit) — " +
     "das ist die Kapitalbindung, keine Broker-Margin. Ohne Verlustbegrenzung nicht bestimmbar.";
   $("g_stats").innerHTML =
-    `<div class="tiles">` +
+    `<div class="stats">` +
       tile(cost >= 0 ? "Einsatz (Debit)" : "Prämieneinnahme (Credit)", fmtNum(Math.abs(cost), 2), "", "accent") +
       tile("Kapitalbindung", capital == null ? "—" : mp + fmtNum(capital, 2), "", "", CAPHINT) +
       tile("Max. Gewinn", money(maxP), "", "pos") +
@@ -2018,7 +3136,7 @@ async function drawPayoff() {
               "Maximaler Gewinn bezogen auf die Kapitalbindung — ohne Gebühren, Zinsen und Steuern.") +
       tile("Breakeven", bes.length ? mp + bes.map(b => fmtNum(b, 2)).join(" / ") : "—") +
     `</div>` +
-    `<div class="tiles greeks">` +
+    `<div class="stats greeks">` +
       gtile("Delta", g.delta, 3) +
       gtile("Gamma", g.gamma, 4) +
       gtile("Vega", g.vega, 3) +
@@ -2028,23 +3146,22 @@ async function drawPayoff() {
 
   let Plotly;
   try { Plotly = await loadPlotly(); }
-  catch (e) { clearPlot(el, `<div style="padding:1rem;color:var(--err)">${e.message}</div>`); return; }
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
-  const okC = C("--ok"), errC = C("--err");
+  catch (e) { clearPlot(el, `<div class="plot-msg err">${e.message}</div>`); return; }
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
+  const okC = C("--up"), errC = C("--down");
   const shapes = [{ type: "line", x0: xs[0], x1: xs[xs.length - 1], y0: 0, y1: 0,
-                    line: { color: C("--border"), width: 1 } }];
+                    line: { color: C("--axis"), width: 1 } }];
   const annotations = [];
   if (spot) {
     const est = spot.source !== "crsp";   // Delta-Schätzung sichtbar machen
     shapes.push({ type: "line", x0: spot.value, x1: spot.value, yref: "paper", y0: 0, y1: 1,
-      line: { color: est ? C("--warn") : C("--muted"), width: 1.5, dash: est ? "dot" : "dash" } });
+      line: { color: est ? C("--warning") : C("--muted-text"), width: 1.5, dash: est ? "dot" : "dash" } });
     annotations.push({ x: spot.value, yref: "paper", y: 1, yanchor: "top", showarrow: false,
       text: est ? `Spot ≈ ${fmtNum(spot.value, 2)} (geschätzt)` : `Spot ${fmtNum(spot.value, 2)} (CRSP)`,
-      font: { color: est ? C("--warn") : C("--secondary"), size: 11 } });
+      font: { color: est ? C("--warn-text") : C("--ink-2"), size: 11 } });
   }
   if (nModel) annotations.push({ xref: "paper", yref: "paper", x: 0, y: 1, xanchor: "left", yanchor: "top",
-    showarrow: false, text: "≈ Modellwert (Black-Scholes)", font: { color: C("--warn"), size: 11 } });
+    showarrow: false, text: "≈ Modellwert (Black-Scholes)", font: { color: C("--warn-text"), size: 11 } });
   // Gewinn grün, Verlust rot: je eine geclippte Fläche und eine geclippte Linie.
   // Beide teilen sich die Breakeven-Stützpunkte, daher gehen sie nahtlos ineinander über.
   const hov = "Kurs %{x:,.2f}<br>P&L %{y:,.2f}<extra></extra>";
@@ -2060,11 +3177,11 @@ async function drawPayoff() {
   ];
   await Plotly.react(readyPlot(el), traces, {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 65, r: 15, t: 25, b: 45 },
     shapes, annotations,
-    xaxis: { title: { text: `Underlying-Kurs am ${fmtDate(ed)}` }, gridcolor: C("--border"), zeroline: false },
-    yaxis: { title: { text: "Gewinn/Verlust" }, gridcolor: C("--border"), zeroline: false },
+    xaxis: { title: { text: `Underlying-Kurs am ${fmtDate(ed)}` }, gridcolor: C("--grid"), zeroline: false },
+    yaxis: { title: { text: "Gewinn/Verlust" }, gridcolor: C("--grid"), zeroline: false },
   }, { responsive: true, displaylogo: false });
 }
 
@@ -2177,12 +3294,12 @@ async function onRealizedDateChange() {
         : `Ergebnis bezogen auf die Kapitalbindung (${fmtNum(cap, 2)}) — ohne Gebühren, Zinsen und Steuern.`);
     const nMiss = perLeg.filter(p => p.exit == null).length;
     $("r_out").innerHTML =
-      `<div class="hero"><span class="k">Realisiert am ${fmtDate(d)}</span>` +
-      `<span class="v ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${fmtNum(pnl, 2)}</span>` +
-      (complete ? "" : `<span class="sub"><span class="warn">${nMiss} von ${legs.length} ` +
+      `<div class="kpi realized"><span class="kpi-label">Realisiert am ${fmtDate(d)}</span>` +
+      `<span class="hero ${pnl > 0 ? "up-t" : pnl < 0 ? "down-t" : ""}">${pnl > 0 ? "+" : ""}${fmtNum(pnl, 2)}</span>` +
+      (complete ? "" : `<span class="kpi-sub"><span class="warn-t">◆ ${nMiss} von ${legs.length} ` +
         `Legs ohne Quote — Ergebnis unvollständig</span></span>`) +
       `</div>` +
-      `<div class="tiles">${capTile}${compareTile}</div>`;
+      `<div class="stats">${capTile}${compareTile}</div>`;
   } catch (e) {
     realizedPoint = null;
     $("r_out").textContent = "Fehler: " + e.message;
@@ -2279,15 +3396,14 @@ async function drawRealized() {
   const el = $("realizedchart");
   if (view !== "strategy") return;
   if (!legs.length) {
-    clearPlot(el, '<div style="padding:1rem;color:var(--muted)">Noch keine Legs in der Position.</div>');
+    clearPlot(el, '<div class="plot-msg">Noch keine Legs in der Position.</div>');
     return;
   }
   let Plotly;
   try { Plotly = await loadPlotly(); }
-  catch (e) { clearPlot(el, `<div style="padding:1rem;color:var(--err)">${e.message}</div>`); return; }
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
-  const okC = C("--ok"), errC = C("--err");
+  catch (e) { clearPlot(el, `<div class="plot-msg err">${e.message}</div>`); return; }
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
+  const okC = C("--up"), errC = C("--down");
   const traces = [];
   if (realizedCurve) {
     // Gewinn-/Verlustzonen wie im Payoff-Diagramm einfärben; der Nulldurchgang
@@ -2310,23 +3426,23 @@ async function drawRealized() {
   if (realizedPoint) traces.push({
     type: "scatter", mode: "markers", name: "gewählter Tag",
     x: [fmtDate(realizedPoint.date)], y: [realizedPoint.pnl],
-    marker: { size: 10, color: realizedPoint.complete ? C("--accent") : C("--warn"),
-              line: { color: C("--bg"), width: 2 } },
+    marker: { size: 10, color: realizedPoint.complete ? C("--accent") : C("--warning"),
+              line: { color: C("--surface"), width: 2 } },
     hovertemplate: "%{x}<br>P&L %{y:,.2f}<extra></extra>",
   });
   if (!traces.length) {
-    clearPlot(el, '<div style="padding:1rem;color:var(--muted)">Auswertungstag wählen.</div>');
+    clearPlot(el, '<div class="plot-msg">Auswertungstag wählen.</div>');
     return;
   }
   await Plotly.react(readyPlot(el), traces, {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 60, r: 15, t: 15, b: 45 },
     showlegend: false,
     shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0,
-               line: { color: C("--border"), width: 1 } }],
-    xaxis: { title: { text: "Handelstag" }, gridcolor: C("--border"), zeroline: false, type: "date" },
-    yaxis: { title: { text: "Realisiertes P&L" }, gridcolor: C("--border"), zeroline: false },
+               line: { color: C("--axis"), width: 1 } }],
+    xaxis: { title: { text: "Handelstag" }, gridcolor: C("--grid"), zeroline: false, type: "date" },
+    yaxis: { title: { text: "Realisiertes P&L" }, gridcolor: C("--grid"), zeroline: false },
   }, { responsive: true, displaylogo: false });
 }
 
@@ -2406,7 +3522,7 @@ $("mc_run").onclick = async () => {
                volQuelle: $("mc_vsrc").value, pWin, mean, median: q(0.5),
                q05: q(0.05), q95: q(0.95), kapital: cap, modellLegs: nModel };
   $("mc_out").innerHTML =
-    `<div class="tiles">` +
+    `<div class="stats">` +
       tile("P(Gewinn)", (pWin * 100).toFixed(1), "%", pWin >= 0.5 ? "pos" : "") +
       tile("Ø Ergebnis", fmtNum(mean, 2), "", signState(mean)) +
       roiTile("Ø Rendite", roi(mean, cap), nModel ? "≈ " : "",
@@ -2422,11 +3538,6 @@ $("mc_run").onclick = async () => {
       `(konstante IV vom Einstieg, kein Smile).</div>` : "");
 
   $("mcchart").classList.remove("hidden");
-  let Plotly;
-  try { Plotly = await loadPlotly(); }
-  catch (e) { clearPlot($("mcchart"), `<div style="padding:1rem;color:var(--err)">${e.message}</div>`); return; }
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
   // Selbst gebinnt statt Plotly-Histogramm: nur so lässt sich jeder Balken nach
   // Vorzeichen einfärben (Verlust rot, Gewinn grün) wie im Payoff-Diagramm.
   const nb = 80, lo = sorted[0], hi = sorted[n - 1];
@@ -2434,24 +3545,38 @@ $("mc_run").onclick = async () => {
   const cnt = new Array(nb).fill(0);
   for (const v of pnls) cnt[Math.min(nb - 1, Math.max(0, Math.floor((v - lo) / bw)))]++;
   const bx = cnt.map((_, i) => lo + (i + 0.5) * bw);
+  // Histogramm merken: ein Theme-Wechsel zeichnet es neu, ohne neu zu simulieren
+  mcPlot = { bx, cnt, bw, n, sigma, mu, T, S0, ed, est: spot.source !== "crsp" };
+  await drawMc();
+};
+
+let mcPlot = null;   // letztes MC-Histogramm (nur Darstellung)
+async function drawMc() {
+  if (!mcPlot || $("mcchart").classList.contains("hidden")) return;
+  const { bx, cnt, bw, n, sigma, mu, T, S0, ed, est } = mcPlot;
+  let Plotly;
+  try { Plotly = await loadPlotly(); }
+  catch (e) { clearPlot($("mcchart"), `<div class="plot-msg err">${e.message}</div>`); return; }
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
+  const upC = C("--up"), downC = C("--down");
   await Plotly.react(readyPlot($("mcchart")), [{
     type: "bar", x: bx, y: cnt, width: bw,
-    marker: { color: bx.map(x => x >= 0 ? C("--ok") : C("--err")) },
+    marker: { color: bx.map(x => x >= 0 ? upC : downC) },
     hovertemplate: "P&L %{x:,.2f}<br>%{y} Pfade<extra></extra>",
   }], {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 60, r: 15, t: 40, b: 45 },
     bargap: 0, showlegend: false,
     title: { text: `${n.toLocaleString("de-DE")} Pfade · σ ${(sigma * 100).toFixed(1)} % · µ ${(mu * 100).toFixed(1)} %` +
-      ` · ${Math.round(T * 365)} Tage · S₀ ${fmtNum(S0, 2)} ${spot.source === "crsp" ? "(CRSP)" : "(≈ geschätzt)"}`,
+      ` · ${Math.round(T * 365)} Tage · S₀ ${fmtNum(S0, 2)} ${est ? "(≈ geschätzt)" : "(CRSP)"}`,
       font: { size: 12 } },
     shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1,
-               line: { color: C("--fg"), width: 1.5, dash: "dash" } }],
-    xaxis: { title: { text: `P&L am ${fmtDate(ed)}` }, gridcolor: C("--border"), zeroline: false },
-    yaxis: { title: { text: "Anzahl Pfade" }, gridcolor: C("--border") },
+               line: { color: C("--ink-2"), width: 1.5, dash: "dash" } }],
+    xaxis: { title: { text: `P&L am ${fmtDate(ed)}` }, gridcolor: C("--grid"), zeroline: false },
+    yaxis: { title: { text: "Anzahl Pfade" }, gridcolor: C("--grid") },
   }, { responsive: true, displaylogo: false });
-};
+}
 
 // ---- Export (Tabelle/Fläche: gefilterte Kette; Zeitreihe: geladene Serie) ----
 function exportData() {
@@ -2807,7 +3932,7 @@ async function aiProviderMeta() {
     // Der Assistent läuft IMMER über den Worker — auch wenn die Daten lokal aus
     // opt_server.py kommen. Ohne Zugriffsschlüssel antwortet der Worker mit 403.
     fehler = "Kein Zugriffsschlüssel gesetzt. Der Assistent läuft über den Cloudflare-Worker — " +
-             "auch im lokalen Betrieb. Trag den Schlüssel unten unter „Einstellungen (Datenquelle)“ ein.";
+             "auch im lokalen Betrieb. Trag den Schlüssel unter „Einstellungen (Datenquelle)“ ein (Zahnrad oben rechts).";
   } else {
     try {
       const r = await fetch(AI_URL, { method: "GET" });
@@ -2872,8 +3997,8 @@ function aiDialog(kontext, meta, mode) {
       done(true);
     };
     $("ai_dlg_cancel").onclick = () => done(false);
-    dlg.onclose = () => resolve(false);   // Escape
-    dlg.showModal();
+    dlg.onclose = () => resolve(false);   // Escape oder Klick neben das Sheet
+    openSheet(dlg);
   });
 }
 
@@ -2934,14 +4059,14 @@ const AI_CHIPS = {
 function aiRenderChips() {
   const list = (AI_CHIPS[view] || AI_CHIPS.table).concat(["Wie bediene ich diese Ansicht?"]);
   $("ai_chips").innerHTML = list
-    .map(t => `<button type="button" class="aichip">${aiEsc(t)}</button>`).join("");
+    .map(t => `<button type="button" class="chip lg aichip">${aiEsc(t)}</button>`).join("");
   for (const b of $("ai_chips").querySelectorAll(".aichip"))
     b.onclick = () => { $("ai_text").value = b.textContent; aiSubmit(); };
 }
 
 function aiOpen(on) {
   $("aidrawer").classList.toggle("open", on);
-  $("ai_toggle").classList.toggle("on", on);
+  $("ai_toggle").setAttribute("aria-pressed", String(on));
   document.body.classList.toggle("ai-open", on);
   // Plotly hört nur auf window-resize: nach der Breitenänderung neu layouten.
   setTimeout(() => window.dispatchEvent(new Event("resize")), 200);
@@ -3062,6 +4187,10 @@ for (const [btn, v] of [["v_table", "table"], ["v_surface", "surface"],
     setView(v);
     if ($("aidrawer").classList.contains("open")) aiRenderChips();
   };
+
+// App-Hülle offline (sw.js cacht nur Hülle + versionierte CDN-Bibliotheken, nie Daten)
+if ("serviceWorker" in navigator)
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 </script>
 </body>
 </html>
