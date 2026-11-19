@@ -739,8 +739,6 @@ dialog.sheet:not([open])::backdrop { opacity:0; }
      Farben nur aus Kit-Tokens. Einzige Ergänzung: --warn-text = Warnfarbe als Text
      (geschätzte Werte: ≈ + Warnfarbe + „geschätzt“); --warning selbst ist hell zu blass für Text. */
   :root { --warn-text: #a35200; }
-  /* alte Token-Namen, die das Chart-JS zur Laufzeit liest → Kit-Tokens */
-  :root { --ok: var(--up); --err: var(--down); --warn: var(--warning); --fg: var(--ink-1); --secondary: var(--ink-2); --bg: var(--surface); }
   @media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --warn-text: var(--warning); } }
   :root[data-theme="dark"] { --warn-text: var(--warning); }
 
@@ -2203,11 +2201,10 @@ async function renderSurface() {
     return;
   }
 
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
   const layoutBase = {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 55, r: 10, t: 10, b: 45 },
   };
   const cfg = { responsive: true, displaylogo: false };
@@ -2224,8 +2221,8 @@ async function renderSurface() {
       hovertemplate: hoverX + "<br>IV %{y:.4f}<extra></extra>",
     }], {
       ...layoutBase,
-      xaxis: { title: { text: xLabel }, gridcolor: C("--border"), zeroline: false },
-      yaxis: { title: { text: "Implizite Volatilität" }, gridcolor: C("--border"), zeroline: false },
+      xaxis: { title: { text: xLabel }, gridcolor: C("--grid"), zeroline: false },
+      yaxis: { title: { text: "Implizite Volatilität" }, gridcolor: C("--grid"), zeroline: false },
     }, cfg);
     return;
   }
@@ -2267,26 +2264,27 @@ async function renderSurface() {
   await Plotly.react(readyPlot(el), [{
     type: "surface", x: xs, y: ys, z,
     colorscale: "Viridis", connectgaps: false,
-    colorbar: { title: { text: "IV" }, outlinewidth: 0, tickfont: { color: C("--fg") } },
+    colorbar: { title: { text: "IV" }, outlinewidth: 0, tickfont: { color: C("--ink-2") } },
     customdata: ytext.map(t => xs.map(() => t)),
     hovertemplate: hoverX + "<br>Verfall %{customdata} (%{y} Tage)<br>IV %{z:.4f}<extra></extra>",
   }], {
     ...layoutBase,
     scene: {
-      xaxis: { title: { text: xLabel }, gridcolor: C("--border"), color: C("--fg") },
-      yaxis: { title: { text: "Tage bis Verfall" }, gridcolor: C("--border"), color: C("--fg") },
-      zaxis: { title: { text: "IV" }, gridcolor: C("--border"), color: C("--fg") },
+      xaxis: { title: { text: xLabel }, gridcolor: C("--grid"), color: C("--ink-2") },
+      yaxis: { title: { text: "Tage bis Verfall" }, gridcolor: C("--grid"), color: C("--ink-2") },
+      zaxis: { title: { text: "IV" }, gridcolor: C("--grid"), color: C("--ink-2") },
       camera: { eye: { x: -1.5, y: -1.6, z: 0.8 } },
     },
   }, cfg);
 }
 
-// Theme-Wechsel: sichtbare Grafik mit neuen Farben neu zeichnen
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+// Theme-Wechsel (Knopf, System oder anderer Tab — das Kit meldet alle als kit:theme):
+// sichtbare Grafiken mit den neuen Token-Farben neu zeichnen
+addEventListener("kit:theme", () => {
   if ($("results").classList.contains("hidden")) return;
   if (view === "surface") renderSurface();
   else if (view === "series") drawSeries();
-  else if (view === "strategy") { drawPayoff(); drawRealized(); }
+  else if (view === "strategy") { drawPayoff(); drawRealized(); drawMc(); }
 });
 
 // ---- Spot des Underlyings: CRSP-Kurs, sonst Delta-Schätzung (sichtbar markiert) ----
@@ -2573,8 +2571,7 @@ async function drawSeries() {
   try { Plotly = await loadPlotly(); }
   catch (e) { clearPlot($("serieschart"), `<div class="plot-msg err">${e.message}</div>`); return; }
 
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
   const m = METRICS[$("s_metric").value];
   const ps = seriesData.points;
   const opt = seriesData.opt;
@@ -2594,27 +2591,27 @@ async function drawSeries() {
   if (estPts.length) traces.push({
     type: "scatter", mode: "markers", name: "≈ geschätzt (BS)",
     x: estPts.map(p => fmtDate(p.date)), y: estPts.map(yOf),
-    marker: { size: 6, color: C("--warn"), symbol: "diamond" },
+    marker: { size: 7, color: C("--warning"), symbol: "diamond" },
     hovertemplate: "%{x}<br>≈ " + m.label + " (geschätzt): %{y:,.4~f}<extra></extra>",
   });
   const u = seriesData.underlying;
   if (u && u.length) traces.push({
     type: "scatter", mode: "lines", name: "Underlying (CRSP)", yaxis: "y2",
     x: u.map(p => fmtDate(p.date)), y: u.map(p => p.prc),
-    line: { color: C("--muted"), width: 1, dash: "dot" },
+    line: { color: C("--muted-text"), width: 1, dash: "dot" },
     hovertemplate: "%{x}<br>Underlying: %{y:,.2f}<extra></extra>",
   });
   await Plotly.react(readyPlot($("serieschart")), traces, {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 60, r: 55, t: 40, b: 45 },
     title: { text: title, font: { size: 13 } },
     showlegend: estPts.length > 0,
     legend: { orientation: "h", y: 1.02, yanchor: "bottom", font: { size: 11 } },
-    xaxis: { title: { text: "Handelstag" }, gridcolor: C("--border"), zeroline: false, type: "date" },
-    yaxis: { title: { text: m.label }, gridcolor: C("--border"), zeroline: false },
+    xaxis: { title: { text: "Handelstag" }, gridcolor: C("--grid"), zeroline: false, type: "date" },
+    yaxis: { title: { text: m.label }, gridcolor: C("--grid"), zeroline: false },
     yaxis2: { overlaying: "y", side: "right", showgrid: false, zeroline: false,
-              title: { text: "Underlying" }, color: C("--muted") },
+              title: { text: "Underlying" }, color: C("--muted-text") },
   }, { responsive: true, displaylogo: false });
 }
 
@@ -3026,6 +3023,7 @@ function renderStrategy() {
   drawPayoff();
   drawLegBreakdown();
   drawRealized();
+  drawMc();   // nur Darstellung: Farben nach einem Theme-Wechsel in einer anderen Ansicht nachziehen
 }
 
 $("g_kind").onchange = renderStrategy;
@@ -3148,22 +3146,21 @@ async function drawPayoff() {
   let Plotly;
   try { Plotly = await loadPlotly(); }
   catch (e) { clearPlot(el, `<div class="plot-msg err">${e.message}</div>`); return; }
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
-  const okC = C("--ok"), errC = C("--err");
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
+  const okC = C("--up"), errC = C("--down");
   const shapes = [{ type: "line", x0: xs[0], x1: xs[xs.length - 1], y0: 0, y1: 0,
-                    line: { color: C("--border"), width: 1 } }];
+                    line: { color: C("--axis"), width: 1 } }];
   const annotations = [];
   if (spot) {
     const est = spot.source !== "crsp";   // Delta-Schätzung sichtbar machen
     shapes.push({ type: "line", x0: spot.value, x1: spot.value, yref: "paper", y0: 0, y1: 1,
-      line: { color: est ? C("--warn") : C("--muted"), width: 1.5, dash: est ? "dot" : "dash" } });
+      line: { color: est ? C("--warning") : C("--muted-text"), width: 1.5, dash: est ? "dot" : "dash" } });
     annotations.push({ x: spot.value, yref: "paper", y: 1, yanchor: "top", showarrow: false,
       text: est ? `Spot ≈ ${fmtNum(spot.value, 2)} (geschätzt)` : `Spot ${fmtNum(spot.value, 2)} (CRSP)`,
-      font: { color: est ? C("--warn") : C("--secondary"), size: 11 } });
+      font: { color: est ? C("--warn-text") : C("--ink-2"), size: 11 } });
   }
   if (nModel) annotations.push({ xref: "paper", yref: "paper", x: 0, y: 1, xanchor: "left", yanchor: "top",
-    showarrow: false, text: "≈ Modellwert (Black-Scholes)", font: { color: C("--warn"), size: 11 } });
+    showarrow: false, text: "≈ Modellwert (Black-Scholes)", font: { color: C("--warn-text"), size: 11 } });
   // Gewinn grün, Verlust rot: je eine geclippte Fläche und eine geclippte Linie.
   // Beide teilen sich die Breakeven-Stützpunkte, daher gehen sie nahtlos ineinander über.
   const hov = "Kurs %{x:,.2f}<br>P&L %{y:,.2f}<extra></extra>";
@@ -3179,11 +3176,11 @@ async function drawPayoff() {
   ];
   await Plotly.react(readyPlot(el), traces, {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 65, r: 15, t: 25, b: 45 },
     shapes, annotations,
-    xaxis: { title: { text: `Underlying-Kurs am ${fmtDate(ed)}` }, gridcolor: C("--border"), zeroline: false },
-    yaxis: { title: { text: "Gewinn/Verlust" }, gridcolor: C("--border"), zeroline: false },
+    xaxis: { title: { text: `Underlying-Kurs am ${fmtDate(ed)}` }, gridcolor: C("--grid"), zeroline: false },
+    yaxis: { title: { text: "Gewinn/Verlust" }, gridcolor: C("--grid"), zeroline: false },
   }, { responsive: true, displaylogo: false });
 }
 
@@ -3404,9 +3401,8 @@ async function drawRealized() {
   let Plotly;
   try { Plotly = await loadPlotly(); }
   catch (e) { clearPlot(el, `<div class="plot-msg err">${e.message}</div>`); return; }
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
-  const okC = C("--ok"), errC = C("--err");
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
+  const okC = C("--up"), errC = C("--down");
   const traces = [];
   if (realizedCurve) {
     // Gewinn-/Verlustzonen wie im Payoff-Diagramm einfärben; der Nulldurchgang
@@ -3429,8 +3425,8 @@ async function drawRealized() {
   if (realizedPoint) traces.push({
     type: "scatter", mode: "markers", name: "gewählter Tag",
     x: [fmtDate(realizedPoint.date)], y: [realizedPoint.pnl],
-    marker: { size: 10, color: realizedPoint.complete ? C("--accent") : C("--warn"),
-              line: { color: C("--bg"), width: 2 } },
+    marker: { size: 10, color: realizedPoint.complete ? C("--accent") : C("--warning"),
+              line: { color: C("--surface"), width: 2 } },
     hovertemplate: "%{x}<br>P&L %{y:,.2f}<extra></extra>",
   });
   if (!traces.length) {
@@ -3439,13 +3435,13 @@ async function drawRealized() {
   }
   await Plotly.react(readyPlot(el), traces, {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 60, r: 15, t: 15, b: 45 },
     showlegend: false,
     shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0,
-               line: { color: C("--border"), width: 1 } }],
-    xaxis: { title: { text: "Handelstag" }, gridcolor: C("--border"), zeroline: false, type: "date" },
-    yaxis: { title: { text: "Realisiertes P&L" }, gridcolor: C("--border"), zeroline: false },
+               line: { color: C("--axis"), width: 1 } }],
+    xaxis: { title: { text: "Handelstag" }, gridcolor: C("--grid"), zeroline: false, type: "date" },
+    yaxis: { title: { text: "Realisiertes P&L" }, gridcolor: C("--grid"), zeroline: false },
   }, { responsive: true, displaylogo: false });
 }
 
@@ -3541,11 +3537,6 @@ $("mc_run").onclick = async () => {
       `(konstante IV vom Einstieg, kein Smile).</div>` : "");
 
   $("mcchart").classList.remove("hidden");
-  let Plotly;
-  try { Plotly = await loadPlotly(); }
-  catch (e) { clearPlot($("mcchart"), `<div class="plot-msg err">${e.message}</div>`); return; }
-  const css = getComputedStyle(document.documentElement);
-  const C = v => css.getPropertyValue(v).trim();
   // Selbst gebinnt statt Plotly-Histogramm: nur so lässt sich jeder Balken nach
   // Vorzeichen einfärben (Verlust rot, Gewinn grün) wie im Payoff-Diagramm.
   const nb = 80, lo = sorted[0], hi = sorted[n - 1];
@@ -3553,24 +3544,38 @@ $("mc_run").onclick = async () => {
   const cnt = new Array(nb).fill(0);
   for (const v of pnls) cnt[Math.min(nb - 1, Math.max(0, Math.floor((v - lo) / bw)))]++;
   const bx = cnt.map((_, i) => lo + (i + 0.5) * bw);
+  // Histogramm merken: ein Theme-Wechsel zeichnet es neu, ohne neu zu simulieren
+  mcPlot = { bx, cnt, bw, n, sigma, mu, T, S0, ed, est: spot.source !== "crsp" };
+  await drawMc();
+};
+
+let mcPlot = null;   // letztes MC-Histogramm (nur Darstellung)
+async function drawMc() {
+  if (!mcPlot || $("mcchart").classList.contains("hidden")) return;
+  const { bx, cnt, bw, n, sigma, mu, T, S0, ed, est } = mcPlot;
+  let Plotly;
+  try { Plotly = await loadPlotly(); }
+  catch (e) { clearPlot($("mcchart"), `<div class="plot-msg err">${e.message}</div>`); return; }
+  const C = cssVar;   // Kit-Token zur Zeichenzeit (hell/dunkel)
+  const upC = C("--up"), downC = C("--down");
   await Plotly.react(readyPlot($("mcchart")), [{
     type: "bar", x: bx, y: cnt, width: bw,
-    marker: { color: bx.map(x => x >= 0 ? C("--ok") : C("--err")) },
+    marker: { color: bx.map(x => x >= 0 ? upC : downC) },
     hovertemplate: "P&L %{x:,.2f}<br>%{y} Pfade<extra></extra>",
   }], {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: C("--fg"), family: "system-ui, sans-serif", size: 12 },
+    font: { color: C("--ink-2"), family: C("--font"), size: 12 },
     margin: { l: 60, r: 15, t: 40, b: 45 },
     bargap: 0, showlegend: false,
     title: { text: `${n.toLocaleString("de-DE")} Pfade · σ ${(sigma * 100).toFixed(1)} % · µ ${(mu * 100).toFixed(1)} %` +
-      ` · ${Math.round(T * 365)} Tage · S₀ ${fmtNum(S0, 2)} ${spot.source === "crsp" ? "(CRSP)" : "(≈ geschätzt)"}`,
+      ` · ${Math.round(T * 365)} Tage · S₀ ${fmtNum(S0, 2)} ${est ? "(≈ geschätzt)" : "(CRSP)"}`,
       font: { size: 12 } },
     shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1,
-               line: { color: C("--fg"), width: 1.5, dash: "dash" } }],
-    xaxis: { title: { text: `P&L am ${fmtDate(ed)}` }, gridcolor: C("--border"), zeroline: false },
-    yaxis: { title: { text: "Anzahl Pfade" }, gridcolor: C("--border") },
+               line: { color: C("--ink-2"), width: 1.5, dash: "dash" } }],
+    xaxis: { title: { text: `P&L am ${fmtDate(ed)}` }, gridcolor: C("--grid"), zeroline: false },
+    yaxis: { title: { text: "Anzahl Pfade" }, gridcolor: C("--grid") },
   }, { responsive: true, displaylogo: false });
-};
+}
 
 // ---- Export (Tabelle/Fläche: gefilterte Kette; Zeitreihe: geladene Serie) ----
 function exportData() {
